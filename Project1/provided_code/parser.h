@@ -34,7 +34,7 @@ struct Monomial {
     int exponent;                      // default is 1 if omitted
 };
 
-// Represents a term: an optional coefficient followed by one or more monomials
+// Represents a term: an optional coefficient followed by a monomial list
 struct Term {
     int coefficient;                   // default is 1 if not specified
     std::vector<Monomial> monomials;
@@ -51,6 +51,19 @@ struct PolyDecl {
     PolyBody body;
 };
 
+// ---------- Data Structures for EXECUTE Section ----------
+
+enum StmtType { INPUT_STMT, OUTPUT_STMT, ASSIGN_STMT };
+
+struct Statement {
+    StmtType stmt_type;
+    std::string var;       // For INPUT, OUTPUT, or the LHS of an assignment.
+    // For assignments, we store the parsed poly_evaluation as a PolyBody.
+    PolyBody poly_eval;
+};
+
+typedef std::vector<Statement> StmtList;
+
 // ----------------- Parser Class ---------------------
 class Parser {
   public:
@@ -59,24 +72,45 @@ class Parser {
     void parse_input();
     void parse_program();
     void parse_tasks_section();
-
     void parse_poly_section();
+    void parse_execute_section();
+    void parse_inputs_section();
+
+    // POLY Section functions
     void parse_poly_decl_list();
     void parse_poly_decl();
     PolyHeader parse_poly_header();
     std::vector<std::string> parse_id_list();
     PolyBody parse_poly_body();
 
-    // Expression parsing functions
+    // Expression parsing functions (for polynomial bodies)
     Term parse_term();
     std::vector<Monomial> parse_monomial_list();
     Monomial parse_monomial();
     Primary parse_primary();
 
+    // EXECUTE Section functions
+    void parse_statement_list();
+    void parse_input_statement();
+    void parse_output_statement();
+    void parse_assign_statement();
+    PolyBody parse_poly_evaluation(); 
+    void parse_argument_list();
+    void parse_argument();
+
+    // INPUTS Section function
+    void parse_num_list();
+
+    // Debug printing functions
     void printPolyDeclarations();
+    void printFullInput();
 
     bool isTaskSelected(int taskNumber);
     bool tasks[7];
+
+    // Storage for EXECUTE and INPUTS sections:
+    StmtList statements;
+    std::vector<int> inputs;
 
   private:
     LexicalAnalyzer lexer;
@@ -85,7 +119,7 @@ class Parser {
     std::vector<PolyDecl> polyDeclarations;
 };
 
-// ---------- Helper functions for converting the expression to string ----------
+// ----------Helper functions----------
 std::string primaryToString(const Primary& prim);
 std::string monomialToString(const Monomial& mono);
 std::string termToString(const Term& term);
