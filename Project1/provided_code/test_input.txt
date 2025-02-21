@@ -1,11 +1,13 @@
 TASKS
-    1 5
+    1 2 3
 POLY
-    F1 = x^4 x^3 + 3 x^2 x^2 + 20;
-    F2(X,Y) = 3 ( (X + Y^2)^2 + 4 (X+Y) )^2;
+    F = x + 2;
+    G = x - 1;
+    F(Y,Z) = 3;
+    G(Y,Z) = Y + 3 (Y - 2)^2 + Z;
 EXECUTE
     INPUT A;
-    w = F1(A);
+    w = F(A);
     OUTPUT w;
 INPUTS
-    3 8 9
+    3 4 5

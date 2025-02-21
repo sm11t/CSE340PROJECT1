@@ -4,6 +4,12 @@
 #include <string>
 #include "lexer.h"
 
+struct PolyHeaderInfo {
+    std::string name;  // Polynomial name
+    int line_no;       // Line number of the declaration
+};
+
+
 class Parser {
   public:
     Parser();                     // Constructor
@@ -35,7 +41,7 @@ class Parser {
     void input_statement();
     void output_statement();
     void assign_statement();
-    void poly_name();
+    Token poly_name();
     void poly_evaluation();
     void argument_list();
     void argument();
@@ -47,6 +53,8 @@ class Parser {
     LexicalAnalyzer lexer;
     void syntax_error();
     Token expect(TokenType expected_type);
+    std::vector<PolyHeaderInfo> polyHeaders;
+    std::vector<int> duplicateLines;
 };
 
 #endif

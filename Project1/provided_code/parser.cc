@@ -99,6 +99,14 @@
  {
      expect(POLY);
      poly_decl_list();
+     if (!duplicateLines.empty()) {
+        cout << "Semantic Error Code 1:";
+        for (size_t i = 0; i < duplicateLines.size(); i++) {
+            cout << " " << duplicateLines[i];
+        }
+        cout << endl;
+        exit(1);
+    }
  }
  
 
@@ -120,22 +128,36 @@
  }
  
 
- void Parser::poly_header()
+ Token Parser::poly_name()
  {
-     poly_name();
-     if (lexer.peek(1).token_type == LPAREN)
-     {
-         expect(LPAREN);
-         id_list();
-         expect(RPAREN);
-     }
+    return expect(ID);
  }
- 
 
- void Parser::poly_name()
- {
-     expect(ID);
- }
+ void Parser::poly_header() {
+    // Get the polynomial name token with its line number.
+    Token nameToken = poly_name();
+    
+    // Create a header info structure for duplicate checking.
+    PolyHeaderInfo current;
+    current.name = nameToken.lexeme;
+    current.line_no = nameToken.line_no; 
+
+    for (size_t i = 0; i < polyHeaders.size(); i++) {
+        if (polyHeaders[i].name == current.name) {
+            // Found a duplicate—record its line number.
+            duplicateLines.push_back(current.line_no);
+            break;
+        }
+    }
+    
+    polyHeaders.push_back(current);
+
+    if (lexer.peek(1).token_type == LPAREN) {
+        expect(LPAREN);
+        id_list();
+        expect(RPAREN);
+    }
+}
  
 
  void Parser::id_list()
