@@ -13,7 +13,8 @@ class Parser {
     // Grammar productions
     void program();
     void tasks_section();
-    void num_list();
+    void tasknum_list();
+    void inputnum_list();
     void poly_section();
     void poly_decl_list();
     void poly_decl();
@@ -39,6 +40,8 @@ class Parser {
     void argument_list();
     void argument();
     void inputs_section();
+
+    bool tasks[7];
 
   private:
     LexicalAnalyzer lexer;

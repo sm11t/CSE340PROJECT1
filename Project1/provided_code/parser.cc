@@ -74,17 +74,24 @@
  void Parser::tasks_section()
  {
      expect(TASKS);
-     num_list();
+     tasknum_list();
  }
  
- void Parser::num_list()
- {
-     expect(NUM);
-     while (lexer.peek(1).token_type == NUM)
-     {
-         expect(NUM);
-     }
- }
+ void Parser::tasknum_list() {
+    Token t = expect(NUM);
+    int task_num = stoi(t.lexeme);
+    if (task_num < 1 || task_num > 6)
+        syntax_error();
+    tasks[task_num] = true;
+    while (lexer.peek(1).token_type == NUM) {
+        t = expect(NUM);
+        task_num = stoi(t.lexeme);
+        if (task_num < 1 || task_num > 6)
+            syntax_error();
+        tasks[task_num] = true;
+    }
+}
+
  
  // ---------------------- poly_section ------------------------
 
@@ -352,8 +359,18 @@
  void Parser::inputs_section()
  {
      expect(INPUTS);
-     num_list();
+     inputnum_list();
  }
+
+ void Parser::inputnum_list()
+ {
+     expect(NUM);
+     while (lexer.peek(1).token_type == NUM)
+     {
+         expect(NUM);
+     }
+ }
+
  
 
  // Optional: function to "printFullInput" or do nothing
