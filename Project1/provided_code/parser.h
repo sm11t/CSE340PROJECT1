@@ -5,11 +5,21 @@
 #include "lexer.h"
 #include <unordered_set>
 #include <vector>
+#include <unordered_map>
 
 struct PolyHeaderInfo {
     std::string name;               
     int line_no;                    
     std::vector<std::string> paramNames;  
+};
+
+enum StmtType { STMT_INPUT, STMT_OUTPUT, STMT_ASSIGN };
+
+struct Statement {
+    StmtType type;          // INPUT, OUTPUT, or ASSIGN.
+    std::string var;        // For INPUT/OUTPUT: the variable name; for assignment, the LHS.
+    // (For assignment, later we will add a pointer to an expression tree for the right-hand side.)
+    Statement* next;        // Pointer to the next statement in the list.
 };
 
 
@@ -56,6 +66,13 @@ class Parser {
     std::unordered_set<std::string> declaredPolynomials;    //USING FOR ERROR CODE
     std::vector<int> undefinedPolyUseLines;                 //USING FOR ERROR CODE
     std::vector<int> wrongArgCountLines;                    //USING FOR ERROR CODE
+
+    // TASK 2
+
+    std::unordered_map<std::string, int> symbolTable;
+    int nextAvailable;
+    Statement* stmtList;
+    
 
   private:
     LexicalAnalyzer lexer;

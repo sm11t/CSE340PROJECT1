@@ -2,63 +2,56 @@
 #include <iostream>
 #include <cstdlib>
 #include <algorithm>
+#include <string>
 
 using namespace std;
 
 // ####################### Error Handling #######################
-void Parser::syntax_error()
-{
+void Parser::syntax_error() {
     cout << "SYNTAX ERROR !!!!!&%!!" << endl;
     exit(1);
 }
 
-Token Parser::expect(TokenType expected_type)
-{
+Token Parser::expect(TokenType expected_type) {
     Token token = lexer.GetToken();
-    if (token.token_type != expected_type)
-    {
+    if (token.token_type != expected_type) {
         syntax_error();
     }
     return token;
 }
 
 // ####################### Constructor #######################
-Parser::Parser() {
-    // Initialize tasks array
+Parser::Parser() : nextAvailable(0), stmtList(nullptr) {
     for (int i = 0; i < 7; i++) {
         tasks[i] = false;
     }
 }
 
 // ####################### ConsumeAllInput() #######################
-void Parser::ConsumeAllInput()
-{
+void Parser::ConsumeAllInput() {
     Token token;
     int i = 1;
     token = lexer.peek(i);
     token.Print();
-    while (token.token_type != END_OF_FILE)
-    {
-        i = i + 1;
+    while (token.token_type != END_OF_FILE) {
+        i++;
         token = lexer.peek(i);
         token.Print();
     }
     token = lexer.GetToken();
     token.Print();
-    while (token.token_type != END_OF_FILE)
-    {
+    while (token.token_type != END_OF_FILE) {
         token = lexer.GetToken();
         token.Print();
     }
 }
 
 // ####################### input() #######################
-void Parser::input()
-{
+void Parser::input() {
     program();
     expect(END_OF_FILE);
 
-    // ###CHECKING FOR SEMANTIC ERROR CODE 1###
+    // --- Semantic Error Checks ---
     if (!duplicateLines.empty()) {
         sort(duplicateLines.begin(), duplicateLines.end());
         cout << "Semantic Error Code 1:";
@@ -68,7 +61,6 @@ void Parser::input()
         cout << endl;
         exit(1);
     }
-    // ###CHECKING FOR SEMANTIC ERROR CODE 2###
     if (!invalidMonomialLines.empty()) {
         sort(invalidMonomialLines.begin(), invalidMonomialLines.end());
         cout << "Semantic Error Code 2:";
@@ -78,7 +70,6 @@ void Parser::input()
         cout << endl;
         exit(1);
     }
-    // ###CHECKING FOR SEMANTIC ERROR CODE 3###
     if (!undefinedPolyUseLines.empty()) {
         sort(undefinedPolyUseLines.begin(), undefinedPolyUseLines.end());
         cout << "Semantic Error Code 3:";
@@ -88,7 +79,6 @@ void Parser::input()
         cout << endl;
         exit(1);
     }
-    // ###CHECKING FOR SEMANTIC ERROR CODE 4###
     if (!wrongArgCountLines.empty()) {
         sort(wrongArgCountLines.begin(), wrongArgCountLines.end());
         cout << "Semantic Error Code 4:";
@@ -98,12 +88,27 @@ void Parser::input()
         cout << endl;
         exit(1);
     }
+
+    // --- For Task 2: Execute the program by traversing the statement list ---
+    Statement* curr = stmtList;
+    while (curr != nullptr) {
+        switch (curr->type) {
+            case STMT_INPUT:
+                cout << "INPUT " << curr->var << endl;
+                break;
+            case STMT_OUTPUT:
+                cout << "OUTPUT " << curr->var << endl;
+                break;
+            case STMT_ASSIGN:
+                cout << "ASSIGN " << curr->var << endl;
+                break;
+        }
+        curr = curr->next;
+    }
 }
 
-// ####################### program #######################
-// program → tasks_section poly_section execute_section inputs_section
-void Parser::program()
-{
+// ####################### program() #######################
+void Parser::program() {
     tasks_section();
     poly_section();
     execute_section();
@@ -111,9 +116,7 @@ void Parser::program()
 }
  
 // ####################### tasks_section #######################
-// tasks_section → TASKS num_list
-void Parser::tasks_section()
-{
+void Parser::tasks_section() {
     expect(TASKS);
     tasknum_list();
 }
@@ -135,7 +138,6 @@ void Parser::tasknum_list() {
 }
  
 // ####################### poly_section #######################
-// poly_section → POLY poly_decl_list
 void Parser::poly_section() {
     expect(POLY);
     poly_decl_list();
@@ -157,12 +159,9 @@ void Parser::poly_decl_list() {
 void Parser::poly_decl() {
     poly_header();
     expect(EQUAL);
-    
     currentPolyParams = polyHeaders.back().paramNames;
-    
     poly_body();
     currentPolyParams.clear();
-    
     expect(SEMICOLON);
 }
  
@@ -191,7 +190,7 @@ void Parser::poly_header() {
     current.name = nameToken.lexeme;
     current.line_no = nameToken.line_no; 
 
-    // Duplicate checking 
+    // Duplicate checking (Semantic Error Code 1)
     for (size_t i = 0; i < polyHeaders.size(); i++) {
         if (polyHeaders[i].name == current.name) {
             duplicateLines.push_back(current.line_no);
@@ -338,35 +337,88 @@ void Parser::statement() {
     }
 }
  
+// Helper: Create a new Statement node.
+Statement* newStatement(StmtType type, const std::string &var) {
+    Statement* s = new Statement;
+    s->type = type;
+    s->var = var;
+    s->next = nullptr;
+    return s;
+}
+ 
+// input_statement → INPUT ID SEMICOLON
 void Parser::input_statement() {
     expect(INPUT);
-    expect(ID);
+    Token varTok = expect(ID);
     expect(SEMICOLON);
+    // Allocate variable if needed.
+    if (symbolTable.find(varTok.lexeme) == symbolTable.end()) {
+         symbolTable[varTok.lexeme] = nextAvailable++;
+    }
+    Statement* s = newStatement(STMT_INPUT, varTok.lexeme);
+    if (stmtList == nullptr) {
+         stmtList = s;
+    } else {
+         Statement* curr = stmtList;
+         while (curr->next != nullptr) {
+             curr = curr->next;
+         }
+         curr->next = s;
+    }
 }
  
+// output_statement → OUTPUT ID SEMICOLON
 void Parser::output_statement() {
     expect(OUTPUT);
-    expect(ID);
+    Token varTok = expect(ID);
     expect(SEMICOLON);
+    if (symbolTable.find(varTok.lexeme) == symbolTable.end()) {
+         symbolTable[varTok.lexeme] = nextAvailable++;
+    }
+    Statement* s = newStatement(STMT_OUTPUT, varTok.lexeme);
+    if (stmtList == nullptr) {
+         stmtList = s;
+    } else {
+         Statement* curr = stmtList;
+         while (curr->next != nullptr) {
+             curr = curr->next;
+         }
+         curr->next = s;
+    }
 }
  
+// assign_statement → ID EQUAL poly_evaluation SEMICOLON
 void Parser::assign_statement() {
-    expect(ID);
+    Token lhs = expect(ID);
     expect(EQUAL);
     poly_evaluation();
     expect(SEMICOLON);
+    if (symbolTable.find(lhs.lexeme) == symbolTable.end()) {
+         symbolTable[lhs.lexeme] = nextAvailable++;
+    }
+    Statement* s = newStatement(STMT_ASSIGN, lhs.lexeme);
+    if (stmtList == nullptr) {
+         stmtList = s;
+    } else {
+         Statement* curr = stmtList;
+         while (curr->next != nullptr) {
+             curr = curr->next;
+         }
+         curr->next = s;
+    }
 }
  
 // poly_evaluation → poly_name LPAREN argument_list RPAREN
 void Parser::poly_evaluation() {
     Token polyTok = poly_name();
+    // Check for undeclared polynomial.
     if (declaredPolynomials.find(polyTok.lexeme) == declaredPolynomials.end()) {
          undefinedPolyUseLines.push_back(polyTok.line_no);
     }
     expect(LPAREN);
     int argCount = argument_list();
     expect(RPAREN);
-
+    
     int declaredCount = -1;
     for (size_t i = 0; i < polyHeaders.size(); i++) {
          if (polyHeaders[i].name == polyTok.lexeme) {
@@ -374,7 +426,6 @@ void Parser::poly_evaluation() {
              break;
          }
     }
-    // If declaredCount was found and doesn't match the number of arguments, record an error.
     if (declaredCount != -1 && argCount != declaredCount) {
          wrongArgCountLines.push_back(polyTok.line_no);
     }
@@ -383,10 +434,8 @@ void Parser::poly_evaluation() {
 // argument_list → argument | argument COMMA argument_list
 int Parser::argument_list() {
     int count = 0;
-    // Parse first argument.
     argument();
     count++;
-    // While there are more arguments separated by commas, parse each.
     while (lexer.peek(1).token_type == COMMA) {
          expect(COMMA);
          argument();
@@ -412,8 +461,6 @@ void Parser::argument() {
 }
  
 // ####################### inputs_section #######################
-// inputs_section → INPUTS num_list
-
 void Parser::inputs_section() {
     expect(INPUTS);
     inputnum_list();
@@ -426,8 +473,8 @@ void Parser::inputnum_list() {
     }
 }
  
- int main() {
-     Parser parser;
-     parser.input();
-     return 0;
-    }
+int main() {
+    Parser parser;
+    parser.input();
+    return 0;
+}
