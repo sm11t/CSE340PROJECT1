@@ -5,7 +5,7 @@
 
 using namespace std;
 
-// ---------------------- Error Handling ----------------------
+// ####################### Error Handling #######################
 void Parser::syntax_error()
 {
     cout << "SYNTAX ERROR !!!!!&%!!" << endl;
@@ -22,17 +22,15 @@ Token Parser::expect(TokenType expected_type)
     return token;
 }
 
-// ---------------------- Constructor -------------------------
+// ####################### Constructor #######################
 Parser::Parser() {
     // Initialize tasks array
     for (int i = 0; i < 7; i++) {
         tasks[i] = false;
     }
-    // (Assume that duplicateLines, invalidMonomialLines, polyHeaders, and currentPolyParams
-    // are declared as members in parser.h.)
 }
 
-// ---------------------- ConsumeAllInput() -------------------
+// ####################### ConsumeAllInput() #######################
 void Parser::ConsumeAllInput()
 {
     Token token;
@@ -54,13 +52,13 @@ void Parser::ConsumeAllInput()
     }
 }
 
-// ---------------------- input() ----------------------------
+// ####################### input() #######################
 void Parser::input()
 {
     program();
     expect(END_OF_FILE);
 
-    // *** Now perform the semantic error checks at the very end ***
+    // ###CHECKING FOR SEMANTIC ERROR CODE 1###
     if (!duplicateLines.empty()) {
         sort(duplicateLines.begin(), duplicateLines.end());
         cout << "Semantic Error Code 1:";
@@ -70,6 +68,7 @@ void Parser::input()
         cout << endl;
         exit(1);
     }
+    // ###CHECKING FOR SEMANTIC ERROR CODE 2###
     if (!invalidMonomialLines.empty()) {
         sort(invalidMonomialLines.begin(), invalidMonomialLines.end());
         cout << "Semantic Error Code 2:";
@@ -79,9 +78,19 @@ void Parser::input()
         cout << endl;
         exit(1);
     }
+    // ###CHECKING FOR SEMANTIC ERROR CODE 3###
+    if (!undefinedPolyUseLines.empty()) {
+        sort(undefinedPolyUseLines.begin(), undefinedPolyUseLines.end());
+        cout << "Semantic Error Code 3:";
+        for (size_t i = 0; i < undefinedPolyUseLines.size(); i++) {
+            cout << " " << undefinedPolyUseLines[i];
+        }
+        cout << endl;
+        exit(1);
+    }
 }
 
-// ---------------------- program ----------------------------
+// ####################### program #######################
 // program → tasks_section poly_section execute_section inputs_section
 void Parser::program()
 {
@@ -91,7 +100,7 @@ void Parser::program()
     inputs_section();
 }
  
-// ---------------------- tasks_section -----------------------
+// ####################### tasks_section #######################
 // tasks_section → TASKS num_list
 void Parser::tasks_section()
 {
@@ -115,7 +124,7 @@ void Parser::tasknum_list() {
     }
 }
  
-// ---------------------- poly_section ------------------------
+// ####################### poly_section #######################
 // poly_section → POLY poly_decl_list
 void Parser::poly_section() {
     expect(POLY);
@@ -130,7 +139,6 @@ void Parser::poly_decl_list() {
         poly_decl();
         t = lexer.peek(1);
     }
-    // After processing all polynomial declarations, the next token MUST be EXECUTE.
     if (t.token_type != EXECUTE)
         syntax_error();
 }
@@ -140,7 +148,6 @@ void Parser::poly_decl() {
     poly_header();
     expect(EQUAL);
     
-    // Set currentPolyParams for semantic checks in the body.
     currentPolyParams = polyHeaders.back().paramNames;
     
     poly_body();
@@ -174,20 +181,20 @@ void Parser::poly_header() {
     current.name = nameToken.lexeme;
     current.line_no = nameToken.line_no; 
 
-    // Duplicate checking (Error Code 1)
+    // Duplicate checking 
     for (size_t i = 0; i < polyHeaders.size(); i++) {
         if (polyHeaders[i].name == current.name) {
             duplicateLines.push_back(current.line_no);
             break;
         }
     }
+    declaredPolynomials.insert(current.name);
     
     if (lexer.peek(1).token_type == LPAREN) {
         expect(LPAREN);
-        current.paramNames = id_list();  // Now returns vector<string>
+        current.paramNames = id_list();
         expect(RPAREN);
     } else {
-        // Univariate polynomial: default parameter "x"
         current.paramNames.push_back("x");
     }
     polyHeaders.push_back(current);
@@ -262,7 +269,6 @@ void Parser::exponent() {
 }
  
 // primary → ID | LPAREN term_list RPAREN
-// When parsing a primary, if the token is an ID, check that it is among the valid parameters (currentPolyParams).
 void Parser::primary() {
     if (lexer.peek(1).token_type == ID) {
          Token varTok = expect(ID);
@@ -289,7 +295,7 @@ void Parser::primary() {
     }
 }
  
-// ---------------------- execute_section ----------------------
+// ##################### execute_section #####################
 void Parser::execute_section() {
     expect(EXECUTE);
     statement_list();
@@ -343,7 +349,10 @@ void Parser::assign_statement() {
  
 // poly_evaluation → poly_name LPAREN argument_list RPAREN
 void Parser::poly_evaluation() {
-    poly_name();
+    Token polyTok = poly_name();
+    if (declaredPolynomials.find(polyTok.lexeme) == declaredPolynomials.end()) {
+         undefinedPolyUseLines.push_back(polyTok.line_no);
+    }
     expect(LPAREN);
     argument_list();
     expect(RPAREN);
@@ -374,7 +383,7 @@ void Parser::argument() {
          syntax_error();
 }
  
-// ---------------------- inputs_section ----------------------
+// ####################### inputs_section #######################
 // inputs_section → INPUTS num_list
 void Parser::inputs_section() {
     expect(INPUTS);
@@ -391,6 +400,5 @@ void Parser::inputnum_list() {
  int main() {
      Parser parser;
      parser.input();
-     parser.ConsumeAllInput();
      return 0;
  }

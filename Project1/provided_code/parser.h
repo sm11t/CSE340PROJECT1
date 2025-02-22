@@ -3,6 +3,8 @@
 
 #include <string>
 #include "lexer.h"
+#include <unordered_set>
+#include <vector>
 
 struct PolyHeaderInfo {
     std::string name;               
@@ -51,6 +53,9 @@ class Parser {
 
     bool tasks[7];
 
+    std::unordered_set<std::string> declaredPolynomials;
+    std::vector<int> undefinedPolyUseLines;
+
   private:
     LexicalAnalyzer lexer;
     void syntax_error();
@@ -59,6 +64,7 @@ class Parser {
     std::vector<int> duplicateLines;
     std::vector<std::string> currentPolyParams;
     std::vector<int> invalidMonomialLines; // To record line numbers for invalid monomial names.
+    
 
 };
 
