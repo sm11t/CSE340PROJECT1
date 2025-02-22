@@ -5,9 +5,11 @@
 #include "lexer.h"
 
 struct PolyHeaderInfo {
-    std::string name;  // Polynomial name
-    int line_no;       // Line number of the declaration
+    std::string name;               
+    int line_no;                    
+    std::vector<std::string> paramNames;  
 };
+
 
 
 class Parser {
@@ -25,7 +27,7 @@ class Parser {
     void poly_decl_list();
     void poly_decl();
     void poly_header();
-    void id_list();
+    std::vector<std::string> id_list();
     void poly_body();
     void term_list();
     void add_operator();
@@ -55,6 +57,9 @@ class Parser {
     Token expect(TokenType expected_type);
     std::vector<PolyHeaderInfo> polyHeaders;
     std::vector<int> duplicateLines;
+    std::vector<std::string> currentPolyParams;
+    std::vector<int> invalidMonomialLines; // To record line numbers for invalid monomial names.
+
 };
 
 #endif
