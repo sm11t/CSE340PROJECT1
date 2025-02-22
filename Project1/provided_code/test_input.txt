@@ -1,12 +1,10 @@
 TASKS
-1 2
+    1 2
 POLY
-    F1 = x - 2;
-    F2(Y,Z) = x (x + 2)^2 + 
-    (5 + (Y + V)^2 ) +
-    K H I B^2 Z;
+    F = x + 2;
 EXECUTE
-    a = F1(2);
-    OUTPUT a;
+    INPUT a;
+    w = F(a);
+    OUTPUT w;
 INPUTS
-    3 5 6
+    3

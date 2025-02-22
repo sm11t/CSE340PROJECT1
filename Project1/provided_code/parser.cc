@@ -28,6 +28,13 @@ Parser::Parser() {
     for (int i = 0; i < 7; i++) {
         tasks[i] = false;
     }
+    // Initialize execution-related members.
+    nextMemLocation = 0;
+    nextInput = 0;
+    // Initialize memory array to zero.
+    for (int i = 0; i < 1000; i++) {
+        mem[i] = 0;
+    }
 }
 
 // ####################### ConsumeAllInput() #######################
@@ -87,6 +94,20 @@ void Parser::input()
         }
         cout << endl;
         exit(1);
+    }
+    // ###CHECKING FOR SEMANTIC ERROR CODE 4###
+    if (!wrongArgCountLines.empty()) {
+        sort(wrongArgCountLines.begin(), wrongArgCountLines.end());
+        cout << "Semantic Error Code 4:";
+        for (size_t i = 0; i < wrongArgCountLines.size(); i++) {
+            cout << " " << wrongArgCountLines[i];
+        }
+        cout << endl;
+        exit(1);
+    }
+
+    if (tasks[2]) {
+        execute_program();
     }
 }
 
@@ -330,21 +351,56 @@ void Parser::statement() {
  
 void Parser::input_statement() {
     expect(INPUT);
-    expect(ID);
+    Token varToken = expect(ID);
     expect(SEMICOLON);
+
+    // Allocate memory for the variable if it hasn't been seen before.
+    if (symbolTable.find(varToken.lexeme) == symbolTable.end()) {
+        symbolTable[varToken.lexeme] = nextMemLocation++;
+    }
+
+    // Create and store the statement.
+    Statement* stmt = new Statement;
+    stmt->type = STMT_INPUT;
+    stmt->var = varToken.lexeme;
+    stmt->line_no = varToken.line_no;
+    stmt->polyEval = nullptr; // Not applicable for input.
+    stmtList.push_back(stmt);
 }
  
 void Parser::output_statement() {
     expect(OUTPUT);
-    expect(ID);
+    Token varToken = expect(ID);
     expect(SEMICOLON);
+
+    // Allocate memory if necessary.
+    if (symbolTable.find(varToken.lexeme) == symbolTable.end()) {
+        symbolTable[varToken.lexeme] = nextMemLocation++;
+    }
+
+    Statement* stmt = new Statement;
+    stmt->type = STMT_OUTPUT;
+    stmt->var = varToken.lexeme;
+    stmt->line_no = varToken.line_no;
+    stmt->polyEval = nullptr; // Not applicable for output.
+    stmtList.push_back(stmt);
 }
  
 void Parser::assign_statement() {
-    expect(ID);
+    Token lhsToken = expect(ID);
+    if (symbolTable.find(lhsToken.lexeme) == symbolTable.end()) {
+        symbolTable[lhsToken.lexeme] = nextMemLocation++;
+    }
     expect(EQUAL);
     poly_evaluation();
     expect(SEMICOLON);
+
+    Statement* stmt = new Statement;
+    stmt->type = STMT_ASSIGN;
+    stmt->var = lhsToken.lexeme;
+    stmt->line_no = lhsToken.line_no;
+    stmt->polyEval = nullptr; 
+    stmtList.push_back(stmt);
 }
  
 // poly_evaluation → poly_name LPAREN argument_list RPAREN
@@ -354,17 +410,35 @@ void Parser::poly_evaluation() {
          undefinedPolyUseLines.push_back(polyTok.line_no);
     }
     expect(LPAREN);
-    argument_list();
+    int argCount = argument_list();
     expect(RPAREN);
+
+    int declaredCount = -1;
+    for (size_t i = 0; i < polyHeaders.size(); i++) {
+         if (polyHeaders[i].name == polyTok.lexeme) {
+             declaredCount = polyHeaders[i].paramNames.size();
+             break;
+         }
+    }
+    // If declaredCount was found and doesn't match the number of arguments, record an error.
+    if (declaredCount != -1 && argCount != declaredCount) {
+         wrongArgCountLines.push_back(polyTok.line_no);
+    }
 }
  
 // argument_list → argument | argument COMMA argument_list
-void Parser::argument_list() {
+int Parser::argument_list() {
+    int count = 0;
+    // Parse first argument.
     argument();
+    count++;
+    // While there are more arguments separated by commas, parse each.
     while (lexer.peek(1).token_type == COMMA) {
          expect(COMMA);
          argument();
+         count++;
     }
+    return count;
 }
  
 // argument → ID | NUM | poly_evaluation
@@ -385,20 +459,58 @@ void Parser::argument() {
  
 // ####################### inputs_section #######################
 // inputs_section → INPUTS num_list
+
 void Parser::inputs_section() {
     expect(INPUTS);
     inputnum_list();
 }
  
 void Parser::inputnum_list() {
-    expect(NUM);
+    Token t = expect(NUM);
+    inputs.push_back(stoi(t.lexeme));
     while (lexer.peek(1).token_type == NUM) {
-         expect(NUM);
+         t = expect(NUM);
+         inputs.push_back(stoi(t.lexeme));
     }
 }
+
+void Parser::execute_program() {
+    // Iterate through each statement.
+    for (Statement* stmt : stmtList) {
+        switch (stmt->type) {
+            case STMT_INPUT: {
+                // Check if an input value is available.
+                if (nextInput < inputs.size()) {
+                    int loc = symbolTable[stmt->var];
+                    mem[loc] = inputs[nextInput++];
+                } else {
+                    cerr << "Not enough input values provided." << endl;
+                    exit(1);
+                }
+                break;
+            }
+            case STMT_ASSIGN: {
+                // Placeholder: Here you would call your polynomial evaluation function.
+                // For now, we simulate an evaluation result (e.g., 0).
+                int result = 0; // Replace this with a call to evaluate_polynomial(stmt->polyEval);
+                int loc = symbolTable[stmt->var];
+                mem[loc] = result;
+                break;
+            }
+            case STMT_OUTPUT: {
+                int loc = symbolTable[stmt->var];
+                cout << mem[loc] << endl;
+                break;
+            }
+            default:
+                break;
+        }
+    }
+}
+
  
  int main() {
      Parser parser;
      parser.input();
      return 0;
- }
+    }
