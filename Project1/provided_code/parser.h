@@ -47,14 +47,15 @@ class Parser {
     void assign_statement();
     Token poly_name();
     void poly_evaluation();
-    void argument_list();
+    int argument_list();
     void argument();
     void inputs_section();
 
     bool tasks[7];
 
-    std::unordered_set<std::string> declaredPolynomials;
-    std::vector<int> undefinedPolyUseLines;
+    std::unordered_set<std::string> declaredPolynomials;    //USING FOR ERROR CODE
+    std::vector<int> undefinedPolyUseLines;                 //USING FOR ERROR CODE
+    std::vector<int> wrongArgCountLines;                    //USING FOR ERROR CODE
 
   private:
     LexicalAnalyzer lexer;

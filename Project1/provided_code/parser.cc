@@ -88,6 +88,16 @@ void Parser::input()
         cout << endl;
         exit(1);
     }
+    // ###CHECKING FOR SEMANTIC ERROR CODE 4###
+    if (!wrongArgCountLines.empty()) {
+        sort(wrongArgCountLines.begin(), wrongArgCountLines.end());
+        cout << "Semantic Error Code 4:";
+        for (size_t i = 0; i < wrongArgCountLines.size(); i++) {
+            cout << " " << wrongArgCountLines[i];
+        }
+        cout << endl;
+        exit(1);
+    }
 }
 
 // ####################### program #######################
@@ -354,17 +364,35 @@ void Parser::poly_evaluation() {
          undefinedPolyUseLines.push_back(polyTok.line_no);
     }
     expect(LPAREN);
-    argument_list();
+    int argCount = argument_list();
     expect(RPAREN);
+
+    int declaredCount = -1;
+    for (size_t i = 0; i < polyHeaders.size(); i++) {
+         if (polyHeaders[i].name == polyTok.lexeme) {
+             declaredCount = polyHeaders[i].paramNames.size();
+             break;
+         }
+    }
+    // If declaredCount was found and doesn't match the number of arguments, record an error.
+    if (declaredCount != -1 && argCount != declaredCount) {
+         wrongArgCountLines.push_back(polyTok.line_no);
+    }
 }
  
 // argument_list → argument | argument COMMA argument_list
-void Parser::argument_list() {
+int Parser::argument_list() {
+    int count = 0;
+    // Parse first argument.
     argument();
+    count++;
+    // While there are more arguments separated by commas, parse each.
     while (lexer.peek(1).token_type == COMMA) {
          expect(COMMA);
          argument();
+         count++;
     }
+    return count;
 }
  
 // argument → ID | NUM | poly_evaluation
@@ -385,6 +413,7 @@ void Parser::argument() {
  
 // ####################### inputs_section #######################
 // inputs_section → INPUTS num_list
+
 void Parser::inputs_section() {
     expect(INPUTS);
     inputnum_list();
@@ -401,4 +430,4 @@ void Parser::inputnum_list() {
      Parser parser;
      parser.input();
      return 0;
- }
+    }
