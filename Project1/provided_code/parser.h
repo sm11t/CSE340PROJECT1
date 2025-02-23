@@ -58,6 +58,7 @@ class Parser {
     int argument_list();
     void argument();
     void inputs_section();
+    void executeProgram();
 
     bool tasks[7];
 
