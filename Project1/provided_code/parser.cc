@@ -21,7 +21,7 @@ Token Parser::expect(TokenType expected_type) {
 }
 
 // ####################### Constructor #######################
-Parser::Parser() : nextAvailable(0), stmtList(nullptr) {
+Parser::Parser() : nextAvailable(0), stmtList(nullptr), mem(1000, 0) {
     for (int i = 0; i < 7; i++) {
         tasks[i] = false;
     }
@@ -88,6 +88,26 @@ void Parser::input() {
         cout << endl;
         exit(1);
     }
+
+    // Print symbol table:
+    cout << "Symbol Table:" << endl;
+    for (auto &entry : symbolTable) {
+         cout << "Variable: " << entry.first << " => Memory Location: " << entry.second << endl;
+    }
+    
+    // Print initial memory array (first few entries for brevity)
+    cout << "Initial Memory (first 10 locations):" << endl;
+    for (int i = 0; i < 10; i++) {
+         cout << "mem[" << i << "] = " << mem[i] << endl;
+    }
+    
+    // Print stored input values:
+    cout << "Input Values:" << endl;
+    for (size_t i = 0; i < inputValues.size(); i++) {
+         cout << inputValues[i] << " ";
+    }
+    cout << endl;
+
 
     // --- For Task 2: Execute the program by traversing the statement list ---
     Statement* curr = stmtList;
@@ -467,9 +487,11 @@ void Parser::inputs_section() {
 }
  
 void Parser::inputnum_list() {
-    expect(NUM);
+    Token t = expect(NUM);
+    inputValues.push_back(std::stoi(t.lexeme));
     while (lexer.peek(1).token_type == NUM) {
-         expect(NUM);
+        Token t = expect(NUM);
+        inputValues.push_back(std::stoi(t.lexeme));
     }
 }
  

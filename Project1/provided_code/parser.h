@@ -18,11 +18,8 @@ enum StmtType { STMT_INPUT, STMT_OUTPUT, STMT_ASSIGN };
 struct Statement {
     StmtType type;          // INPUT, OUTPUT, or ASSIGN.
     std::string var;        // For INPUT/OUTPUT: the variable name; for assignment, the LHS.
-    // (For assignment, later we will add a pointer to an expression tree for the right-hand side.)
     Statement* next;        // Pointer to the next statement in the list.
 };
-
-
 
 class Parser {
   public:
@@ -63,16 +60,18 @@ class Parser {
 
     bool tasks[7];
 
-    std::unordered_set<std::string> declaredPolynomials;    //USING FOR ERROR CODE
-    std::vector<int> undefinedPolyUseLines;                 //USING FOR ERROR CODE
-    std::vector<int> wrongArgCountLines;                    //USING FOR ERROR CODE
+    std::unordered_set<std::string> declaredPolynomials;    // For semantic error checking.
+    std::vector<int> undefinedPolyUseLines;                 
+    std::vector<int> wrongArgCountLines;                    
 
-    // TASK 2
+    // TASK 2 – Runtime Data Structures:
+    std::unordered_map<std::string, int> symbolTable; // maps variable names to memory locations.
+    int nextAvailable;                                // next available memory location.
+    Statement* stmtList;                              // linked list of statements.
 
-    std::unordered_map<std::string, int> symbolTable;
-    int nextAvailable;
-    Statement* stmtList;
-    
+    // NEW: Memory array for variables and input storage.
+    std::vector<int> mem;         // e.g., 1000 slots, all initialized to 0.
+    std::vector<int> inputValues; // Stores the numbers from the INPUTS section.
 
   private:
     LexicalAnalyzer lexer;
@@ -81,9 +80,7 @@ class Parser {
     std::vector<PolyHeaderInfo> polyHeaders;
     std::vector<int> duplicateLines;
     std::vector<std::string> currentPolyParams;
-    std::vector<int> invalidMonomialLines; // To record line numbers for invalid monomial names.
-    
-
+    std::vector<int> invalidMonomialLines; 
 };
 
 #endif
