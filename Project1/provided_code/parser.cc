@@ -2,77 +2,71 @@
 #include <iostream>
 #include <cstdlib>
 #include <algorithm>
-#include <vector>
-#include <map>
-#include <string>
 #include <functional>
-
+#include <string>
 
 using namespace std;
 
-// ---------------- Error Handling ----------------
-void Parser::syntax_error()
-{
+// We define the global data structures declared 'extern' in parser.h:
+std::vector<Statement*> executeStatements;
+std::unordered_map<std::string,int> symbolTable;
+int mem[1000] = {0};
+int nextAvailable = 0;
+
+// ---------- Parser Implementation ----------
+
+// syntax_error() and expect() are standard.
+void Parser::syntax_error() {
     cout << "SYNTAX ERROR !!!!!&%!!" << endl;
     exit(1);
 }
 
-Token Parser::expect(TokenType expected_type)
-{
+Token Parser::expect(TokenType expected_type) {
     Token token = lexer.GetToken();
-    if (token.token_type != expected_type)
-    {
+    if (token.token_type != expected_type) {
         syntax_error();
     }
     return token;
 }
 
-// -------------- Constructor --------------
+// Constructor
 Parser::Parser() {
-    // Initialize tasks array
     for (int i = 0; i < 7; i++) {
         tasks[i] = false;
     }
-    nextAvailable = 0; // We'll store new variables here
+    nextAvailable = 0;
 }
 
-// ----------------- Helper to consume everything (for debugging) ------------------
-void Parser::ConsumeAllInput()
-{
+// Debug function
+void Parser::ConsumeAllInput() {
     Token token;
     int i = 1;
     token = lexer.peek(i);
     token.Print();
-    while (token.token_type != END_OF_FILE)
-    {
-        i = i + 1;
+    while (token.token_type != END_OF_FILE) {
+        i++;
         token = lexer.peek(i);
         token.Print();
     }
     token = lexer.GetToken();
     token.Print();
-    while (token.token_type != END_OF_FILE)
-    {
+    while (token.token_type != END_OF_FILE) {
         token = lexer.GetToken();
         token.Print();
     }
 }
 
-// ----------------- input() -----------------
-//
-// input → program END_OF_FILE
-//
-void Parser::input()
-{
+// The main parse flow
+void Parser::input() {
     program();
     expect(END_OF_FILE);
 
-    // ---------- SEMANTIC ERROR CHECKS (TASK 1) ----------
+    // ---------- Check any semantic errors from Task 1 ----------
     if (!duplicateLines.empty()) {
         sort(duplicateLines.begin(), duplicateLines.end());
         cout << "Semantic Error Code 1:";
-        for (size_t i = 0; i < duplicateLines.size(); i++) {
-            cout << " " << duplicateLines[i];
+        for (int ln : duplicateLines) {
+            cout << " " << ln;
         }
         cout << endl;
         exit(1);
@@ -80,8 +74,8 @@ void Parser::input()
     if (!invalidMonomialLines.empty()) {
         sort(invalidMonomialLines.begin(), invalidMonomialLines.end());
         cout << "Semantic Error Code 2:";
-        for (size_t i = 0; i < invalidMonomialLines.size(); i++) {
-            cout << " " << invalidMonomialLines[i];
+        for (int ln : invalidMonomialLines) {
+            cout << " " << ln;
         }
         cout << endl;
         exit(1);
@@ -89,8 +83,8 @@ void Parser::input()
     if (!undefinedPolyUseLines.empty()) {
         sort(undefinedPolyUseLines.begin(), undefinedPolyUseLines.end());
         cout << "Semantic Error Code 3:";
-        for (size_t i = 0; i < undefinedPolyUseLines.size(); i++) {
-            cout << " " << undefinedPolyUseLines[i];
+        for (int ln : undefinedPolyUseLines) {
+            cout << " " << ln;
         }
         cout << endl;
         exit(1);
@@ -98,41 +92,40 @@ void Parser::input()
     if (!wrongArgCountLines.empty()) {
         sort(wrongArgCountLines.begin(), wrongArgCountLines.end());
         cout << "Semantic Error Code 4:";
-        for (size_t i = 0; i < wrongArgCountLines.size(); i++) {
-            cout << " " << wrongArgCountLines[i];
+        for (int ln : wrongArgCountLines) {
+            cout << " " << ln;
         }
         cout << endl;
         exit(1);
     }
 
-    // ------------------- Now do Task 4 if it is listed and no errors -------------------
-    // Even if Task 1 wasn't explicitly listed, we've done the checks anyway;
-    // but if tasks[4] == true, we should produce the useless-assignment warnings.
+    // ---------- Task 4: detect useless assignments ----------
     if (tasks[4]) {
         DetectUselessAssignments();
     }
 
-    // --------------- More tasks (e.g. Task 2, 3, 5, etc.) would go here ---------------
+    // ---------- Task 5: print polynomial degrees ----------
+    if (tasks[5]) {
+        // Print each polynomial's name and computed degree
+        for (auto &ph : polyHeaders) {
+            cout << ph.name << ": " << ph.degree << endl;
+        }
+        exit(0);
+    }
+
+    // (If you had other tasks like 2 or 3, you'd do them here.)
 }
 
-// ----------------- program() -----------------
-//
 // program → tasks_section poly_section execute_section inputs_section
-//
-void Parser::program()
-{
+void Parser::program() {
     tasks_section();
     poly_section();
     execute_section();
     inputs_section();
 }
 
-// ----------------- tasks_section() -----------------
-//
 // tasks_section → TASKS num_list
-//
-void Parser::tasks_section()
-{
+void Parser::tasks_section() {
     expect(TASKS);
     tasknum_list();
 }
@@ -141,23 +134,18 @@ void Parser::tasks_section()
 void Parser::tasknum_list() {
     Token t = expect(NUM);
     int task_num = stoi(t.lexeme);
-    if (task_num < 1 || task_num > 6)
-        syntax_error();
+    if (task_num < 1 || task_num > 6) syntax_error();
     tasks[task_num] = true;
 
     while (lexer.peek(1).token_type == NUM) {
         t = expect(NUM);
         task_num = stoi(t.lexeme);
-        if (task_num < 1 || task_num > 6)
-            syntax_error();
+        if (task_num < 1 || task_num > 6) syntax_error();
         tasks[task_num] = true;
     }
 }
 
-// ----------------- poly_section() -----------------
-//
 // poly_section → POLY poly_decl_list
-//
 void Parser::poly_section() {
     expect(POLY);
     poly_decl_list();
@@ -171,22 +159,53 @@ void Parser::poly_decl_list() {
         poly_decl();
         t = lexer.peek(1);
     }
-    if (t.token_type != EXECUTE)
-        syntax_error();
+    if (t.token_type != EXECUTE) syntax_error();
 }
 
-// poly_decl → poly_header EQUAL poly_body SEMICOLON
+// poly_decl → poly_header EQUAL (poly_body) SEMICOLON
 void Parser::poly_decl() {
     poly_header();
     expect(EQUAL);
 
-    // If we want to check param-names inside the body, store them in currentPolyParams
+    // Now parse the polynomial body, computing its degree in the process.
+    // We'll store that degree in the last poly header we added.
     currentPolyParams = polyHeaders.back().paramNames;
-
-    poly_body();
+    int d = parsePolyBody();  // parse the polynomial body & compute degree
+    polyHeaders.back().degree = d;
     currentPolyParams.clear();
 
     expect(SEMICOLON);
+}
+
+// poly_header → poly_name [ LPAREN id_list RPAREN ]
+void Parser::poly_header() {
+    Token nameToken = poly_name();  // ID
+    PolyHeaderInfo info;
+    info.name = nameToken.lexeme;
+    info.line_no = nameToken.line_no;
+    info.degree = 0;
+
+    // Check for duplicates:
+    for (auto &ph : polyHeaders) {
+        if (ph.name == info.name) {
+            duplicateLines.push_back(info.line_no);
+            break;
+        }
+    }
+
+    declaredPolynomials.insert(info.name);
+
+    // optional param list
+    if (lexer.peek(1).token_type == LPAREN) {
+        expect(LPAREN);
+        info.paramNames = id_list();
+        expect(RPAREN);
+    } else {
+        // default param is "x"
+        info.paramNames.push_back("x");
+    }
+
+    polyHeaders.push_back(info);
 }
 
 // poly_name → ID
@@ -196,172 +215,160 @@ Token Parser::poly_name() {
 
 // id_list → ID | ID COMMA id_list
 vector<string> Parser::id_list() {
-    vector<string> result;
-    Token firstID = expect(ID);
-    result.push_back(firstID.lexeme);
+    vector<string> names;
+    Token t = expect(ID);
+    names.push_back(t.lexeme);
     while (lexer.peek(1).token_type == COMMA) {
         expect(COMMA);
-        Token nextID = expect(ID);
-        result.push_back(nextID.lexeme);
+        Token t2 = expect(ID);
+        names.push_back(t2.lexeme);
     }
-    return result;
+    return names;
 }
 
-// poly_header
-void Parser::poly_header() {
-    Token nameToken = poly_name();
-    PolyHeaderInfo current;
-    current.name = nameToken.lexeme;
-    current.line_no = nameToken.line_no;
+// ===================== Parsing polynomial body & computing degree =====================
 
-    // Check for duplicates:
-    for (size_t i = 0; i < polyHeaders.size(); i++) {
-        if (polyHeaders[i].name == current.name) {
-            // Another polynomial with the same name
-            duplicateLines.push_back(current.line_no);
+// parsePolyBody -> parseTermList (and return that degree)
+int Parser::parsePolyBody() {
+    return parseTermList();
+}
+
+// parseTermList → (Term) ( (PLUS|MINUS) Term )* 
+// The degree is the max of degrees among all terms in this list.
+int Parser::parseTermList() {
+    int d = parseTerm(); // parse first term
+    while (true) {
+        TokenType tt = lexer.peek(1).token_type;
+        if (tt == PLUS || tt == MINUS) {
+            lexer.GetToken(); // consume + or -
+            int d2 = parseTerm();
+            if (d2 > d) d = d2;
+        } else {
             break;
         }
     }
-    declaredPolynomials.insert(current.name);
-
-    if (lexer.peek(1).token_type == LPAREN) {
-        expect(LPAREN);
-        current.paramNames = id_list();
-        expect(RPAREN);
-    } else {
-        // default param is "x"
-        current.paramNames.push_back("x");
-    }
-    polyHeaders.push_back(current);
+    return d;
 }
 
-// poly_body → term_list
-void Parser::poly_body() {
-    term_list();
-}
-
-// term_list → term | term add_operator term_list
-void Parser::term_list() {
-    term();
-    while (lexer.peek(1).token_type == PLUS || lexer.peek(1).token_type == MINUS) {
-        add_operator();
-        term();
-    }
-}
-
-void Parser::add_operator() {
-    Token t = lexer.peek(1);
-    if (t.token_type == MINUS)
-        expect(MINUS);
-    else if (t.token_type == PLUS)
-        expect(PLUS);
-    else
-        syntax_error();
-}
-
-// term → coefficient | coefficient monomial_list | monomial_list
-void Parser::term() {
+// parseTerm → 
+//    (NUM) [ monomial_list ] 
+//  | monomial_list
+//  The degree is 0 if just a coefficient, otherwise the degree is monomial_list
+int Parser::parseTerm() {
     Token t = lexer.peek(1);
     if (t.token_type == NUM) {
-        coefficient();
-        Token t1 = lexer.peek(1);
-        if (t1.token_type == ID || t1.token_type == LPAREN) {
-            monomial_list();
+        // consume the coefficient
+        Token coeffTok = lexer.GetToken(); // e.g. 3
+        // if next token is ID or LPAREN => parse monomial_list => degree
+        TokenType tt = lexer.peek(1).token_type;
+        if (tt == ID || tt == LPAREN) {
+            int mdeg = parseMonomialList();
+            return mdeg; 
+        } else {
+            // just a coefficient => degree = 0
+            return 0;
         }
-    }
-    else if (t.token_type == ID || t.token_type == LPAREN) {
-        monomial_list();
-    }
-    else {
+    } else if (t.token_type == ID || t.token_type == LPAREN) {
+        // no explicit coefficient => interpret coefficient=1
+        return parseMonomialList();
+    } else {
         syntax_error();
+        return 0;
     }
 }
 
-void Parser::coefficient() {
-    expect(NUM);
-}
-
-// monomial_list → monomial | monomial monomial_list
-void Parser::monomial_list() {
-    monomial();
-    while (lexer.peek(1).token_type == ID || lexer.peek(1).token_type == LPAREN) {
-        monomial();
+// parseMonomialList → monomial ( monomial )*
+/** The degree of a monomial_list is the sum of degrees of each monomial. **/
+int Parser::parseMonomialList() {
+    int total = 0;
+    while (true) {
+        TokenType tt = lexer.peek(1).token_type;
+        if (tt != ID && tt != LPAREN) {
+            break;
+        }
+        int mdeg = parseMonomial();
+        total += mdeg;
     }
+    return total;
 }
 
-// monomial → primary | primary exponent
-void Parser::monomial() {
-    primary();
+// parseMonomial → primary [ exponent ]
+// The degree is degree(primary) * exponent (exponent defaults to 1 if not present).
+int Parser::parseMonomial() {
+    int dprim = parsePrimary(); 
+    int d = dprim;
     if (lexer.peek(1).token_type == POWER) {
-        exponent();
+        lexer.GetToken(); // consume ^
+        Token n = expect(NUM);
+        int expval = stoi(n.lexeme);
+        d = dprim * expval;
     }
+    return d;
 }
 
-// exponent → POWER NUM
-void Parser::exponent() {
-    expect(POWER);
-    expect(NUM);
-}
-
-// primary → ID | LPAREN term_list RPAREN
-void Parser::primary() {
-    if (lexer.peek(1).token_type == ID) {
-        Token varTok = expect(ID);
-
-        // Check if varTok is valid for this polynomial
-        // (i.e. does it appear in currentPolyParams?)
+// parsePrimary → ID | LPAREN TermList RPAREN
+// If ID => degree=1. 
+// If parenthesized => parseTermList => that is the degree.
+int Parser::parsePrimary() {
+    Token t = lexer.peek(1);
+    if (t.token_type == ID) {
+        // check if valid param
+        Token varTok = lexer.GetToken(); // consume ID
+        // semantic check if varTok is in currentPolyParams
         if (!currentPolyParams.empty()) {
-            bool valid = false;
+            bool found = false;
             for (auto &p : currentPolyParams) {
-                if (p == varTok.lexeme) {
-                    valid = true;
-                    break;
-                }
+                if (p == varTok.lexeme) { found = true; break; }
             }
-            if (!valid) {
+            if (!found) {
                 invalidMonomialLines.push_back(varTok.line_no);
             }
         }
+        return 1;
     }
-    else if (lexer.peek(1).token_type == LPAREN) {
-        expect(LPAREN);
-        term_list();
+    else if (t.token_type == LPAREN) {
+        lexer.GetToken(); // consume (
+        int d = parseTermList();
         expect(RPAREN);
+        return d;
     }
     else {
         syntax_error();
+        return 0;
     }
 }
 
-// ------------------ execute_section -------------------
+// ===================== End polynomial body parse =====================
+
+// ========== EXECUTE SECTION ==========
+
 void Parser::execute_section() {
     expect(EXECUTE);
     statement_list();
 }
 
-// statement_list → statement | statement statement_list
+// statement_list → statement+
 void Parser::statement_list() {
     statement();
-    while (lexer.peek(1).token_type == INPUT ||
-           lexer.peek(1).token_type == OUTPUT ||
-           lexer.peek(1).token_type == ID) {
-        statement();
+    while (true) {
+        TokenType tt = lexer.peek(1).token_type;
+        if (tt == INPUT || tt == OUTPUT || tt == ID) {
+            statement();
+        } else {
+            break;
+        }
     }
 }
 
-// statement → input_statement | output_statement | assign_statement
 void Parser::statement() {
-    Token nextToken = lexer.peek(1);
-    if (nextToken.token_type == INPUT) {
+    Token nextT = lexer.peek(1);
+    if (nextT.token_type == INPUT) {
         input_statement();
-    }
-    else if (nextToken.token_type == OUTPUT) {
+    } else if (nextT.token_type == OUTPUT) {
         output_statement();
-    }
-    else if (nextToken.token_type == ID) {
+    } else if (nextT.token_type == ID) {
         assign_statement();
-    }
-    else {
+    } else {
         syntax_error();
     }
 }
@@ -369,19 +376,16 @@ void Parser::statement() {
 void Parser::input_statement() {
     expect(INPUT);
     Token varTok = expect(ID);
-    Token semi = expect(SEMICOLON);
+    expect(SEMICOLON);
 
-    // Allocate variable if not already allocated
     allocateVariable(varTok.lexeme);
 
-    // Build the statement
-    Statement* stmt = new Statement;
-    stmt->type = STMT_INPUT;
-    stmt->variable = varTok.lexeme; // store the variable name
-    stmt->line_no = varTok.line_no;
-    stmt->polyEval = nullptr;
-
-    executeStatements.push_back(stmt);
+    Statement* s = new Statement;
+    s->type = STMT_INPUT;
+    s->variable = varTok.lexeme;
+    s->line_no = varTok.line_no;
+    s->polyEval = nullptr;
+    executeStatements.push_back(s);
 }
 
 void Parser::output_statement() {
@@ -389,65 +393,59 @@ void Parser::output_statement() {
     Token varTok = expect(ID);
     expect(SEMICOLON);
 
-    // Allocate variable if not already allocated
     allocateVariable(varTok.lexeme);
 
-    Statement* stmt = new Statement;
-    stmt->type = STMT_OUTPUT;
-    stmt->variable = varTok.lexeme;
-    stmt->line_no = varTok.line_no;
-    stmt->polyEval = nullptr;
-
-    executeStatements.push_back(stmt);
+    Statement* s = new Statement;
+    s->type = STMT_OUTPUT;
+    s->variable = varTok.lexeme;
+    s->line_no = varTok.line_no;
+    s->polyEval = nullptr;
+    executeStatements.push_back(s);
 }
 
 void Parser::assign_statement() {
     Token lhsTok = expect(ID);
-    allocateVariable(lhsTok.lexeme); // ensure LHS has memory
+    allocateVariable(lhsTok.lexeme);
     expect(EQUAL);
 
-    // Create a new PolyEval
+    // Build a PolyEval for the RHS
     PolyEval* pe = new PolyEval;
-    pe->polyName = "";
-    pe->args.clear();
-
     poly_evaluation(pe);
 
     expect(SEMICOLON);
 
-    Statement* stmt = new Statement;
-    stmt->type = STMT_ASSIGN;
-    stmt->variable = lhsTok.lexeme;
-    stmt->line_no = lhsTok.line_no;
-    stmt->polyEval = pe;
-
-    executeStatements.push_back(stmt);
+    Statement* s = new Statement;
+    s->type = STMT_ASSIGN;
+    s->variable = lhsTok.lexeme;
+    s->line_no = lhsTok.line_no;
+    s->polyEval = pe;
+    executeStatements.push_back(s);
 }
 
-// poly_evaluation → poly_name LPAREN argument_list RPAREN
+// poly_evaluation -> poly_name ( argument_list )
 void Parser::poly_evaluation(PolyEval* pe) {
     Token polyTok = poly_name();
     pe->polyName = polyTok.lexeme;
-    if (declaredPolynomials.find(polyTok.lexeme) == declaredPolynomials.end()) {
+    if (declaredPolynomials.find(pe->polyName) == declaredPolynomials.end()) {
         undefinedPolyUseLines.push_back(polyTok.line_no);
     }
     expect(LPAREN);
-    int argCount = argument_list(pe);
+    int c = argument_list(pe);
     expect(RPAREN);
 
+    // check argument count
     int declaredCount = -1;
-    for (size_t i = 0; i < polyHeaders.size(); i++) {
-         if (polyHeaders[i].name == polyTok.lexeme) {
-             declaredCount = polyHeaders[i].paramNames.size();
-             break;
-         }
+    for (auto &ph : polyHeaders) {
+        if (ph.name == pe->polyName) {
+            declaredCount = ph.paramNames.size();
+            break;
+        }
     }
-    if (declaredCount != -1 && argCount != declaredCount) {
-         wrongArgCountLines.push_back(polyTok.line_no);
+    if (declaredCount != -1 && c != declaredCount) {
+        wrongArgCountLines.push_back(polyTok.line_no);
     }
 }
 
-// argument_list → argument | argument COMMA argument_list
 int Parser::argument_list(PolyEval* pe) {
     int count = 0;
     argument(pe);
@@ -460,40 +458,38 @@ int Parser::argument_list(PolyEval* pe) {
     return count;
 }
 
-// argument → ID | NUM | poly_evaluation
+// argument -> ID | NUM | nested poly_evaluation
 void Parser::argument(PolyEval* pe) {
-    Token nextToken = lexer.peek(1);
-    if (nextToken.token_type == ID) {
-         Token t1 = lexer.peek(2);
-         if (t1.token_type == LPAREN) {
-              // Instead of pushing "NESTED", create and store the nested PolyEval
-              PolyEval* nested = new PolyEval;
-              poly_evaluation(nested);
-              pe->nestedArgs.push_back(nested);
-         } else {
-              Token t = expect(ID);
-              pe->args.push_back(t.lexeme);
-         }
+    Token t = lexer.peek(1);
+    if (t.token_type == ID) {
+        Token t2 = lexer.peek(2);
+        if (t2.token_type == LPAREN) {
+            // nested call
+            PolyEval* nested = new PolyEval;
+            poly_evaluation(nested);
+            pe->nestedArgs.push_back(nested);
+        } else {
+            Token idTok = expect(ID);
+            pe->args.push_back(idTok.lexeme);
+        }
     }
-    else if (nextToken.token_type == NUM) {
-         Token t = expect(NUM);
-         pe->args.push_back(t.lexeme);
+    else if (t.token_type == NUM) {
+        Token numTok = expect(NUM);
+        pe->args.push_back(numTok.lexeme);
     }
     else {
-         syntax_error();
+        syntax_error();
     }
 }
 
+// ========== inputs_section ==========
 
-// ------------------- inputs_section -------------------
-//
-// inputs_section → INPUTS num_list
-//
 void Parser::inputs_section() {
     expect(INPUTS);
     inputnum_list();
 }
 
+// inputnum_list -> NUM+
 void Parser::inputnum_list() {
     expect(NUM);
     while (lexer.peek(1).token_type == NUM) {
@@ -501,117 +497,98 @@ void Parser::inputnum_list() {
     }
 }
 
-// Allocate memory for variable if not already allocated
-int Parser::allocateVariable(const std::string &varName) {
+// ========== Memory and Execution ==========
+
+int Parser::allocateVariable(const string &varName) {
     if (symbolTable.find(varName) == symbolTable.end()) {
         symbolTable[varName] = nextAvailable++;
     }
     return symbolTable[varName];
 }
 
-// Dummy stubs for execution (not used unless Task2 is active)
 void Parser::execute_program() {
-    // Example only; not relevant unless you do Task 2
-    int next_input = 0;
-    vector<int> inputs;
-    for (Statement* stmt : executeStatements) {
-        switch (stmt->type) {
-            case STMT_INPUT: {
-                int loc = symbolTable[stmt->variable];
-                // Suppose we read inputs[next_input++], etc.
-                break;
-            }
-            case STMT_ASSIGN: {
-                int value = evaluate_polynomial(stmt->polyEval);
-                int loc = symbolTable[stmt->variable];
-                // mem[loc] = value;
-                break;
-            }
-            case STMT_OUTPUT: {
-                int loc = symbolTable[stmt->variable];
-                // cout << mem[loc] << endl;
-                break;
-            }
-            default: break;
-        }
-    }
+    // Not relevant unless Task 2 is implemented
 }
 
-int Parser::evaluate_polynomial(PolyEval* pe) {
-    // Dummy “constant” evaluation
+int Parser::evaluate_polynomial(PolyEval* /*polyEval*/) {
+    // dummy
     return 42;
 }
 
+// ========== Task 4: Useless Assignments ==========
 
-//   USELESS ASSIGNMENTS (TASK 4)
-
-void Parser::DetectUselessAssignments()
-{
-
+void Parser::DetectUselessAssignments() {
+    // We'll do a forward-scan approach as before.
     std::function<void(PolyEval*, vector<int>&)> collectUsedVars;
     collectUsedVars = [&](PolyEval* pe, vector<int>& usedVars) {
         if (!pe) return;
-        for (auto &arg : pe->args) {
-            bool isNumber = true;
-            for (char c : arg) {
+        // simple arguments
+        for (auto &a : pe->args) {
+            bool isNum = true;
+            for (char c : a) {
                 if (c < '0' || c > '9') {
-                    isNumber = false;
+                    isNum = false;
                     break;
                 }
             }
-            if (!isNumber && arg != "NESTED") {
-                if (symbolTable.find(arg) != symbolTable.end()) {
-                    usedVars.push_back(symbolTable[arg]);
+            if (!isNum) {
+                if (symbolTable.find(a) != symbolTable.end()) {
+                    usedVars.push_back(symbolTable[a]);
                 }
             }
         }
-        for (auto nested : pe->nestedArgs) {
+        // nested calls
+        for (auto* nested : pe->nestedArgs) {
             collectUsedVars(nested, usedVars);
         }
     };
 
     vector<int> uselessLines;
     int n = executeStatements.size();
-
     for (int i = 0; i < n; i++) {
         if (executeStatements[i]->type == STMT_ASSIGN) {
             string var = executeStatements[i]->variable;
             int vloc = symbolTable[var];
             bool used = false;
-            for (int j = i + 1; j < n; j++) {
+
+            // Scan forward
+            for (int j = i+1; j < n; j++) {
+                // If redefinition of var => check if used in RHS
                 if ((executeStatements[j]->type == STMT_ASSIGN ||
-                     executeStatements[j]->type == STMT_INPUT) &&
-                    executeStatements[j]->variable == var) {
+                     executeStatements[j]->type == STMT_INPUT)
+                    && executeStatements[j]->variable == var) 
+                {
                     if (executeStatements[j]->type == STMT_ASSIGN) {
+                        // see if var is used in j's RHS
                         vector<int> usedVars;
                         collectUsedVars(executeStatements[j]->polyEval, usedVars);
-                        bool useFound = false;
-                        for (int u : usedVars) {
-                            if (u == vloc) {
-                                useFound = true;
-                                break;
-                            }
+                        bool found = false;
+                        for (int loc : usedVars) {
+                            if (loc == vloc) {found=true; break;}
                         }
-                        if (useFound) { used = true; break; }
-                        else { break; }
-                    } else {
-                        break;
+                        if (found) { used = true; }
                     }
+                    break; 
                 }
+                // If an OUTPUT uses var
                 if (executeStatements[j]->type == STMT_OUTPUT &&
-                    executeStatements[j]->variable == var) {
+                    executeStatements[j]->variable == var) 
+                {
                     used = true;
                     break;
                 }
+                // If another assignment's RHS uses var
                 if (executeStatements[j]->type == STMT_ASSIGN) {
                     vector<int> usedVars;
                     collectUsedVars(executeStatements[j]->polyEval, usedVars);
-                    for (int u : usedVars) {
-                        if (u == vloc) { used = true; break; }
+                    bool found = false;
+                    for (int loc : usedVars) {
+                        if (loc == vloc) { found=true; break; }
                     }
-                    if (used) break;
+                    if (found) { used=true; break; }
                 }
             }
+
             if (!used) {
                 uselessLines.push_back(executeStatements[i]->line_no);
             }
@@ -626,4 +603,12 @@ void Parser::DetectUselessAssignments()
         }
         cout << endl;
     }
+}
+
+// ========== main() ==========
+
+int main() {
+    Parser parser;
+    parser.input();
+    return 0;
 }
