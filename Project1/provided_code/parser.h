@@ -53,6 +53,7 @@ class Parser {
     void output_statement();
     void assign_statement();
     Token poly_name();
+    void executeInputStatements();
     void poly_evaluation();
     int argument_list();
     void argument();

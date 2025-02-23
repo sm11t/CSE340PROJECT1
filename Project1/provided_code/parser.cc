@@ -89,26 +89,36 @@ void Parser::input() {
         exit(1);
     }
 
-    // Print symbol table:
+    if (!wrongArgCountLines.empty()) {
+        sort(wrongArgCountLines.begin(), wrongArgCountLines.end());
+        cout << "Semantic Error Code 4:";
+        for (size_t i = 0; i < wrongArgCountLines.size(); i++) {
+            cout << " " << wrongArgCountLines[i];
+        }
+        cout << endl;
+        exit(1);
+    }
+
+    // --- Debug Print Runtime Data Structures ---
+    // (Optional: You can leave these prints if you still want to see the symbol table, mem, and input values.)
     cout << "Symbol Table:" << endl;
     for (auto &entry : symbolTable) {
          cout << "Variable: " << entry.first << " => Memory Location: " << entry.second << endl;
     }
     
-    // Print initial memory array (first few entries for brevity)
     cout << "Initial Memory (first 10 locations):" << endl;
     for (int i = 0; i < 10; i++) {
          cout << "mem[" << i << "] = " << mem[i] << endl;
     }
     
-    // Print stored input values:
     cout << "Input Values:" << endl;
     for (size_t i = 0; i < inputValues.size(); i++) {
          cout << inputValues[i] << " ";
     }
     cout << endl;
 
-
+    // --- Execute only the INPUT statements ---
+    executeInputStatements();
     // --- For Task 2: Execute the program by traversing the statement list ---
     Statement* curr = stmtList;
     while (curr != nullptr) {
@@ -492,6 +502,29 @@ void Parser::inputnum_list() {
     while (lexer.peek(1).token_type == NUM) {
         Token t = expect(NUM);
         inputValues.push_back(std::stoi(t.lexeme));
+    }
+}
+
+void Parser::executeInputStatements() {
+    int inputIndex = 0;
+    Statement* curr = stmtList;
+    while (curr != nullptr) {
+        if (curr->type == STMT_INPUT) {
+            int loc = symbolTable[curr->var];
+            if (inputIndex < inputValues.size()) {
+                mem[loc] = inputValues[inputIndex];
+                inputIndex++;
+            } else {
+                cout << "Error: Not enough input values." << endl;
+                exit(1);
+            }
+        }
+        curr = curr->next;
+    }
+    // Debug: Print memory state for variables in the symbol table.
+    cout << "Memory state after executing INPUT statements:" << endl;
+    for (auto &entry : symbolTable) {
+         cout << entry.first << " (loc " << entry.second << "): " << mem[entry.second] << endl;
     }
 }
  
