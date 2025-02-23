@@ -8,7 +8,7 @@
 #include "lexer.h"
 
 // The struct that stores info about each declared polynomial.
-// We now store a 'degree' field here for Task 5.
+// We store a 'degree' field for Task 5.
 struct PolyHeaderInfo {
     std::string name;               
     int line_no;                    
@@ -61,16 +61,15 @@ public:
     Token poly_name();
     std::vector<std::string> id_list();
 
-    // Instead of having "poly_body()" plus separate "term_list()", etc.
-    // we define ONE set of parsing functions that also returns the degree:
-    int parsePolyBody();     // parses the polynomial body and returns degree
-    int parseTermList();     // returns degree of term_list
-    int parseTerm();         // returns degree of one term
-    int parseMonomialList(); // returns degree of monomial_list (sum)
-    int parseMonomial();     // returns degree of monomial
-    int parsePrimary();      // returns degree of primary
+    // Single-pass parse of polynomial bodies (also computing degree)
+    int parsePolyBody();     
+    int parseTermList();     
+    int parseTerm();         
+    int parseMonomialList(); 
+    int parseMonomial();     
+    int parsePrimary();      
 
-    // The old functions become trivial or removed:
+    // EXECUTE section
     void execute_section();
     void statement_list();
     void statement();
@@ -80,7 +79,7 @@ public:
     void inputs_section();
     void inputnum_list();
     
-    // For a polynomial evaluation in an assignment's RHS:
+    // For a polynomial evaluation in assignment's RHS
     void poly_evaluation(PolyEval*);
     int argument_list(PolyEval*);
     void argument(PolyEval*);
@@ -92,11 +91,13 @@ public:
 
     // Task 4
     void DetectUselessAssignments();
+    // Task 3
+    void DetectUninitializedVars();
 
     // We also store tasks
     bool tasks[7]; // tasks[i] is true if Task i is requested
 
-    // For semantic checks
+    // For semantic checks (Task 1)
     std::unordered_set<std::string> declaredPolynomials;
     std::vector<int> undefinedPolyUseLines; 
     std::vector<int> wrongArgCountLines;
@@ -114,7 +115,5 @@ private:
     // For checking invalid monomial names inside the current polynomial:
     std::vector<std::string> currentPolyParams;
 };
-
-int main();
 
 #endif
