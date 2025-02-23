@@ -20,10 +20,11 @@ enum StatementType {
 
 // Structure to represent a polynomial evaluation.
 struct PolyEval {
-    std::string polyName;           // Name of the polynomial to evaluate.
-    std::vector<std::string> args;  // For simplicity, store each argument as a string.
-    // (Later you can extend this to distinguish numbers, IDs, or nested evaluations.)
+    std::string polyName;
+    std::vector<std::string> args;      // for simple arguments (IDs or NUMs)
+    std::vector<PolyEval*> nestedArgs;    // for nested polynomial evaluations
 };
+
 
 // Structure to represent an execution statement.
 struct Statement {
@@ -88,6 +89,8 @@ class Parser {
     void execute_program();
     int evaluate_polynomial(PolyEval* polyEval);
 
+    void DetectUselessAssignments();
+
     bool tasks[7];
 
     std::unordered_set<std::string> declaredPolynomials;    //USING FOR ERROR CODE
@@ -107,5 +110,11 @@ class Parser {
     
 
 };
+
+int main() {
+    Parser parser;
+    parser.input();
+    return 0;
+   }
 
 #endif
