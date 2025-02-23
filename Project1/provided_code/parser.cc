@@ -340,31 +340,70 @@ void Parser::statement() {
  
 void Parser::input_statement() {
     expect(INPUT);
-    expect(ID);
+    Token varTok = expect(ID);
     expect(SEMICOLON);
+    
+    // Allocate variable if not already allocated.
+    allocateVariable(varTok.lexeme);
+    
+    // Create a new statement.
+    Statement* stmt = new Statement;
+    stmt->type = STMT_INPUT;
+    stmt->variable = varTok.lexeme;
+    stmt->line_no = varTok.line_no;
+    stmt->polyEval = nullptr;  // Not used for INPUT.
+    executeStatements.push_back(stmt);
 }
  
 void Parser::output_statement() {
     expect(OUTPUT);
-    expect(ID);
+    Token varTok = expect(ID);
     expect(SEMICOLON);
+    
+    // Allocate variable if not already allocated.
+    allocateVariable(varTok.lexeme);
+    
+    Statement* stmt = new Statement;
+    stmt->type = STMT_OUTPUT;
+    stmt->variable = varTok.lexeme;
+    stmt->line_no = varTok.line_no;
+    stmt->polyEval = nullptr;
+    executeStatements.push_back(stmt);
 }
  
 void Parser::assign_statement() {
-    expect(ID);
+    Token lhsTok = expect(ID);
+    allocateVariable(lhsTok.lexeme); // Ensure LHS variable has memory.
     expect(EQUAL);
-    poly_evaluation();
+    
+    // Create a new PolyEval to store the evaluation information.
+    PolyEval* pe = new PolyEval;
+    pe->polyName = "";  // Will be set in poly_evaluation().
+    pe->args.clear();
+    
+    // Call poly_evaluation(), which should now populate the PolyEval structure.
+    poly_evaluation(pe);
+    
     expect(SEMICOLON);
+    
+    // Create a new assignment statement.
+    Statement* stmt = new Statement;
+    stmt->type = STMT_ASSIGN;
+    stmt->variable = lhsTok.lexeme;
+    stmt->line_no = lhsTok.line_no;
+    stmt->polyEval = pe;
+    executeStatements.push_back(stmt);
 }
  
 // poly_evaluation → poly_name LPAREN argument_list RPAREN
-void Parser::poly_evaluation() {
+void Parser::poly_evaluation(PolyEval* pe) {
     Token polyTok = poly_name();
+    pe->polyName = polyTok.lexeme;  // Store the polynomial name.
     if (declaredPolynomials.find(polyTok.lexeme) == declaredPolynomials.end()) {
-         undefinedPolyUseLines.push_back(polyTok.line_no);
+        undefinedPolyUseLines.push_back(polyTok.line_no);
     }
     expect(LPAREN);
-    int argCount = argument_list();
+    int argCount = argument_list(pe);  // Pass PolyEval to collect arguments.
     expect(RPAREN);
 
     int declaredCount = -1;
@@ -374,42 +413,90 @@ void Parser::poly_evaluation() {
              break;
          }
     }
-    // If declaredCount was found and doesn't match the number of arguments, record an error.
     if (declaredCount != -1 && argCount != declaredCount) {
          wrongArgCountLines.push_back(polyTok.line_no);
     }
 }
  
 // argument_list → argument | argument COMMA argument_list
-int Parser::argument_list() {
+int Parser::argument_list(PolyEval* pe) {
     int count = 0;
-    // Parse first argument.
-    argument();
+    argument(pe);
     count++;
-    // While there are more arguments separated by commas, parse each.
     while (lexer.peek(1).token_type == COMMA) {
          expect(COMMA);
-         argument();
+         argument(pe);
          count++;
     }
     return count;
 }
  
 // argument → ID | NUM | poly_evaluation
-void Parser::argument() {
+void Parser::argument(PolyEval* pe) {
     Token nextToken = lexer.peek(1);
     if (nextToken.token_type == ID) {
+         // Look ahead to decide if it is a nested poly_evaluation.
          Token t1 = lexer.peek(2);
-         if (t1.token_type == LPAREN)
-              poly_evaluation();
-         else
-              expect(ID);
+         if (t1.token_type == LPAREN) {
+              PolyEval* nested = new PolyEval;
+              poly_evaluation(nested);
+              pe->args.push_back("NESTED");
+         } else {
+              Token t = expect(ID);
+              pe->args.push_back(t.lexeme);
+         }
     }
-    else if (nextToken.token_type == NUM)
-         expect(NUM);
-    else
+    else if (nextToken.token_type == NUM) {
+         Token t = expect(NUM);
+         pe->args.push_back(t.lexeme);
+    }
+    else {
          syntax_error();
+    }
 }
+
+int Parser::allocateVariable(const std::string &varName) {
+    if (symbolTable.find(varName) == symbolTable.end()) {
+        symbolTable[varName] = nextAvailable++;
+    }
+    return symbolTable[varName];
+}
+
+void Parser::execute_program() {
+    int next_input = 0;
+    std::vector<int> inputs;
+    
+    for (Statement* stmt : executeStatements) {
+        switch (stmt->type) {
+            case STMT_INPUT: {
+                int loc = symbolTable[stmt->variable];
+                // Use the next available input value.
+                mem[loc] = inputs[next_input++];
+                break;
+            }
+            case STMT_ASSIGN: {
+                // Evaluate the polynomial.
+                int value = evaluate_polynomial(stmt->polyEval);
+                int loc = symbolTable[stmt->variable];
+                mem[loc] = value;
+                break;
+            }
+            case STMT_OUTPUT: {
+                int loc = symbolTable[stmt->variable];
+                std::cout << mem[loc] << std::endl;
+                break;
+            }
+            default:
+                break;
+        }
+    }
+}
+
+int Parser::evaluate_polynomial(PolyEval* pe) {
+    return 42;
+}
+
+
  
 // ####################### inputs_section #######################
 // inputs_section → INPUTS num_list
