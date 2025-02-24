@@ -47,8 +47,7 @@ extern int nextAvailable;
 class Parser {
 public:
     Parser();
-    void input();            // parse the entire input program (program + EOF)
-    void ConsumeAllInput();  // prints out the remaining tokens (for debugging)
+    void input();            
 
     // Grammar
     void program();
@@ -61,7 +60,7 @@ public:
     Token poly_name();
     std::vector<std::string> id_list();
 
-    // Single-pass parse of polynomial bodies (also computing degree)
+
     int parsePolyBody();     
     int parseTermList();     
     int parseTerm();         
@@ -69,7 +68,7 @@ public:
     int parseMonomial();     
     int parsePrimary();      
 
-    // EXECUTE section
+    // EXECUTE
     void execute_section();
     void statement_list();
     void statement();
@@ -79,7 +78,7 @@ public:
     void inputs_section();
     void inputnum_list();
     
-    // For a polynomial evaluation in assignment's RHS
+    // For a polynomial evaluation
     void poly_evaluation(PolyEval*);
     int argument_list(PolyEval*);
     void argument(PolyEval*);
@@ -94,7 +93,7 @@ public:
     // Task 3
     void DetectUninitializedVars();
 
-    // We also store tasks
+   
     bool tasks[7]; // tasks[i] is true if Task i is requested
 
     // For semantic checks (Task 1)
@@ -107,6 +106,8 @@ public:
 private:
     LexicalAnalyzer lexer;
     void syntax_error();
+
+
     Token expect(TokenType expected_type);
 
     // We'll store polynomial headers (name, param list, degree, line no, etc.)

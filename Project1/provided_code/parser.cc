@@ -35,23 +35,6 @@ Parser::Parser() {
     nextAvailable = 0;
 }
 
-void Parser::ConsumeAllInput() {
-    Token token;
-    int i = 1;
-    token = lexer.peek(i);
-    token.Print();
-    while (token.token_type != END_OF_FILE) {
-        i++;
-        token = lexer.peek(i);
-        token.Print();
-    }
-    token = lexer.GetToken();
-    token.Print();
-    while (token.token_type != END_OF_FILE) {
-        token = lexer.GetToken();
-        token.Print();
-    }
-}
 
 void Parser::input() {
     program();
