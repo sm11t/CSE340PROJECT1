@@ -7,49 +7,84 @@
 #include <vector>
 #include "lexer.h"
 
-// The struct that stores info about each declared polynomial.
-// We store a 'degree' field for Task 5.
-struct PolyHeaderInfo {
-    std::string name;               
-    int line_no;                    
-    std::vector<std::string> paramNames;  
-    int degree;  // Computed degree for Task 5
-};
-
-// For the EXECUTE section:
 enum StatementType {
     STMT_INPUT,
     STMT_OUTPUT,
     STMT_ASSIGN
 };
 
+enum ADDOP {
+    ADDOP_NONE,
+    ADDOP_PLUS,
+    ADDOP_MINUS
+};
+
+struct PrimaryNode;
+struct MonomialNode;
+struct TermNode;
+
+/**
+ * For polynomial representation:
+ * A polynomial is a linked list of TermNode.
+ */
+struct TermNode {
+    int coefficient;
+    MonomialNode* monomials; // chain of factors in this term
+    ADDOP addop;             // how this term combines with the next
+    TermNode* next;          // pointer to the next term
+};
+
+struct MonomialNode {
+    PrimaryNode* primary;
+    int exponent;
+    MonomialNode* next;
+};
+
+struct PrimaryNode {
+    bool isParen;          // false => varName used, true => subTermList used
+    std::string varName;
+    TermNode* subTermList; // used if isParen == true
+};
+
+/**
+ * For the EXECUTE section statements:
+ */
 struct PolyEval {
     std::string polyName;
-    std::vector<std::string> args;        // simple arguments (IDs or NUMs)
-    std::vector<PolyEval*> nestedArgs;    // nested polynomial evaluations
+    std::vector<std::string> args;        // arguments that are either ID or NUM
+    std::vector<PolyEval*> nestedArgs;    // nested polynomial calls
 };
 
 struct Statement {
     StatementType type;
-    std::string variable;  // LHS for assignment, or var used by INPUT/OUTPUT
-    PolyEval* polyEval;    // only for STMT_ASSIGN
-    int line_no;           // line number for error/warning reporting
+    std::string variable;  // e.g. "X" for INPUT X; or LHS for assignments; or var in OUTPUT
+    PolyEval* polyEval;    // used only if type == STMT_ASSIGN
+    int line_no;
 };
 
-// We'll store all statements from the EXECUTE section here.
+// Global data structures for the entire program:
 extern std::vector<Statement*> executeStatements;
-
-// Symbol table mapping variable name -> location index
 extern std::unordered_map<std::string,int> symbolTable;
 extern int mem[1000];
 extern int nextAvailable;
 
+/**
+ * We store each declared polynomial's header and AST in PolyHeaderInfo.
+ */
+struct PolyHeaderInfo {
+    std::string name;
+    int line_no;
+    std::vector<std::string> paramNames;  // e.g. (x, y, z)
+    int degree;
+    TermNode* astRoot;                    // top-level AST pointer
+};
+
 class Parser {
 public:
     Parser();
-    void input();            
+    void input();
 
-    // Grammar
+    // Grammar rules
     void program();
     void tasks_section();
     void tasknum_list();
@@ -60,61 +95,73 @@ public:
     Token poly_name();
     std::vector<std::string> id_list();
 
+    int parsePolyBody();
+    TermNode* parseTermListAST(int &degreeOut);
+    TermNode* parseTermAST(int &maxDeg);
+    MonomialNode* parseMonomialListAST(int &totalDeg);
+    MonomialNode* parseMonomialAST(int &degOut);
+    PrimaryNode* parsePrimaryAST(int &degOut);
 
-    int parsePolyBody();     
-    int parseTermList();     
-    int parseTerm();         
-    int parseMonomialList(); 
-    int parseMonomial();     
-    int parsePrimary();      
-
-    // EXECUTE
     void execute_section();
     void statement_list();
     void statement();
     void input_statement();
     void output_statement();
     void assign_statement();
+
+    void poly_evaluation(PolyEval* pe);
+    int argument_list(PolyEval* pe);
+    void argument(PolyEval* pe);
+
     void inputs_section();
     void inputnum_list();
-    
-    // For a polynomial evaluation
-    void poly_evaluation(PolyEval*);
-    int argument_list(PolyEval*);
-    void argument(PolyEval*);
 
-    // Memory, execution stubs
     int allocateVariable(const std::string &varName);
+
     void execute_program();
-    int evaluate_polynomial(PolyEval*);
+    int evaluate_polynomial(PolyEval* pe);
 
-    // Task 4
-    void DetectUselessAssignments();
-    // Task 3
+    int evalPolyAST(TermNode* termList,
+                    const std::vector<int> &argValues,
+                    const std::unordered_map<std::string,int> &paramMap);
+
+    int evalTermNode(TermNode* t,
+                     const std::vector<int> &argValues,
+                     const std::unordered_map<std::string,int> &paramMap);
+
+    int evalMonomialList(MonomialNode* mono,
+                         const std::vector<int> &argValues,
+                         const std::unordered_map<std::string,int> &paramMap);
+
+    int evalPrimary(PrimaryNode* prim,
+                    const std::vector<int> &argValues,
+                    const std::unordered_map<std::string,int> &paramMap);
+
+    // Task 3 and Task 4
     void DetectUninitializedVars();
+    void DetectUselessAssignments();
 
-   
-    bool tasks[7]; // tasks[i] is true if Task i is requested
+    bool tasks[7]; 
 
     // For semantic checks (Task 1)
     std::unordered_set<std::string> declaredPolynomials;
-    std::vector<int> undefinedPolyUseLines; 
+    std::vector<int> undefinedPolyUseLines;
     std::vector<int> wrongArgCountLines;
     std::vector<int> duplicateLines;
     std::vector<int> invalidMonomialLines;
 
 private:
     LexicalAnalyzer lexer;
+    Token expect(TokenType expected_type);
     void syntax_error();
 
-
-    Token expect(TokenType expected_type);
-
-    // We'll store polynomial headers (name, param list, degree, line no, etc.)
+    // Polynomials
     std::vector<PolyHeaderInfo> polyHeaders;
-
-    // For checking invalid monomial names inside the current polynomial:
     std::vector<std::string> currentPolyParams;
+
+    // We store input numbers from INPUTS here
+    std::vector<int> inputValues;
+    int inputIndex;
 };
 
 #endif

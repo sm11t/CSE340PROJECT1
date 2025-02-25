@@ -4,16 +4,12 @@
 #include <algorithm>
 #include <functional>
 #include <string>
-
 using namespace std;
 
-// Global data structures declared 'extern' in parser.h
 std::vector<Statement*> executeStatements;
 std::unordered_map<std::string,int> symbolTable;
 int mem[1000] = {0};
 int nextAvailable = 0;
-
-// ---------- Parser Implementation ----------
 
 void Parser::syntax_error() {
     cout << "SYNTAX ERROR !!!!!&%!!" << endl;
@@ -33,14 +29,14 @@ Parser::Parser() {
         tasks[i] = false;
     }
     nextAvailable = 0;
+    inputIndex = 0; 
 }
-
 
 void Parser::input() {
     program();
     expect(END_OF_FILE);
 
-    // ---------- Check any semantic errors from Task 1 ----------
+    // ---------- Check Task 1 semantic errors ----------
     if (!duplicateLines.empty()) {
         sort(duplicateLines.begin(), duplicateLines.end());
         cout << "Semantic Error Code 1:";
@@ -78,27 +74,46 @@ void Parser::input() {
         exit(1);
     }
 
-    // ---------- Task 3: detect uninitialized arguments ----------
+    // ---------- Task 2: Execute statements ----------
+    if (tasks[2]) {
+        for (Statement* st : executeStatements) {
+            if (st->type == STMT_INPUT) {
+                if (inputIndex < (int)inputValues.size()) {
+                    mem[symbolTable[st->variable]] = inputValues[inputIndex++];
+                } else {
+                    mem[symbolTable[st->variable]] = 0;
+                }
+            }
+            else if (st->type == STMT_OUTPUT) {
+                int loc = symbolTable[st->variable];
+                cout << mem[loc] << endl;
+            }
+            else if (st->type == STMT_ASSIGN) {
+                int value = evaluate_polynomial(st->polyEval);
+                mem[symbolTable[st->variable]] = value;
+            }
+        }
+    }
+
+    // ---------- Task 3 ----------
     if (tasks[3]) {
         DetectUninitializedVars();
     }
 
-    // ---------- Task 4: detect useless assignments ----------
+    // ---------- Task 4 ----------
     if (tasks[4]) {
         DetectUselessAssignments();
     }
 
-    // ---------- Task 5: print polynomial degrees ----------
+    // ---------- Task 5 ----------
     if (tasks[5]) {
         for (auto &ph : polyHeaders) {
             cout << ph.name << ": " << ph.degree << endl;
         }
-        exit(0);
     }
-
-    // If tasks[2], tasks[6], etc. exist, handle them similarly.
 }
 
+/** program -> tasks_section poly_section execute_section inputs_section */
 void Parser::program() {
     tasks_section();
     poly_section();
@@ -106,12 +121,12 @@ void Parser::program() {
     inputs_section();
 }
 
+/** TASKS num_list */
 void Parser::tasks_section() {
     expect(TASKS);
     tasknum_list();
 }
 
-// num_list → NUM | NUM num_list
 void Parser::tasknum_list() {
     Token t = expect(NUM);
     int task_num = stoi(t.lexeme);
@@ -126,6 +141,7 @@ void Parser::tasknum_list() {
     }
 }
 
+/** poly_section -> POLY poly_decl_list */
 void Parser::poly_section() {
     expect(POLY);
     poly_decl_list();
@@ -141,11 +157,11 @@ void Parser::poly_decl_list() {
     if (t.token_type != EXECUTE) syntax_error();
 }
 
+/** poly_decl -> poly_header EQUAL poly_body SEMICOLON */
 void Parser::poly_decl() {
     poly_header();
     expect(EQUAL);
 
-    currentPolyParams = polyHeaders.back().paramNames;
     int d = parsePolyBody();
     polyHeaders.back().degree = d;
     currentPolyParams.clear();
@@ -153,14 +169,15 @@ void Parser::poly_decl() {
     expect(SEMICOLON);
 }
 
+/** poly_header -> poly_name [ LPAREN id_list RPAREN ]? */
 void Parser::poly_header() {
     Token nameToken = poly_name();
     PolyHeaderInfo info;
     info.name = nameToken.lexeme;
     info.line_no = nameToken.line_no;
     info.degree = 0;
+    info.astRoot = nullptr;
 
-    // Check duplicates
     for (auto &ph : polyHeaders) {
         if (ph.name == info.name) {
             duplicateLines.push_back(info.line_no);
@@ -178,13 +195,16 @@ void Parser::poly_header() {
     }
 
     polyHeaders.push_back(info);
+    currentPolyParams = polyHeaders.back().paramNames;
 }
 
+/** poly_name -> ID */
 Token Parser::poly_name() {
     return expect(ID);
 }
 
-vector<string> Parser::id_list() {
+/** id_list -> ID | ID COMMA id_list */
+std::vector<std::string> Parser::id_list() {
     vector<string> names;
     Token t = expect(ID);
     names.push_back(t.lexeme);
@@ -196,107 +216,182 @@ vector<string> Parser::id_list() {
     return names;
 }
 
-// ===================== Polynomial Body Parsing (Computes Degree) =====================
-
+/** parsePolyBody -> parseTermListAST */
 int Parser::parsePolyBody() {
-    return parseTermList();
+    int overallDeg = 0;
+    TermNode* root = parseTermListAST(overallDeg);
+    polyHeaders.back().astRoot = root;
+    return overallDeg;
 }
 
-int Parser::parseTermList() {
-    int d = parseTerm();
+/** term_list -> term [ plus_or_minus term_list ]* */
+TermNode* Parser::parseTermListAST(int &degreeOut) {
+    int firstTermDeg = 0;
+    TermNode* firstTerm = parseTermAST(firstTermDeg);
+    TermNode* current = firstTerm;
+    degreeOut = firstTermDeg;
+
     while (true) {
-        TokenType tt = lexer.peek(1).token_type;
-        if (tt == PLUS || tt == MINUS) {
-            lexer.GetToken(); // consume + or -
-            int d2 = parseTerm();
-            if (d2 > d) d = d2;
-        } else {
+        Token t = lexer.peek(1);
+        if (t.token_type == PLUS) {
+            lexer.GetToken();
+            current->addop = ADDOP_PLUS;
+
+            int nextTermDeg = 0;
+            TermNode* nextTerm = parseTermAST(nextTermDeg);
+            current->next = nextTerm;
+            current = nextTerm;
+
+            if (nextTermDeg > degreeOut) degreeOut = nextTermDeg;
+        }
+        else if (t.token_type == MINUS) {
+            lexer.GetToken();
+            current->addop = ADDOP_MINUS;
+
+            int nextTermDeg = 0;
+            TermNode* nextTerm = parseTermAST(nextTermDeg);
+            current->next = nextTerm;
+            current = nextTerm;
+
+            if (nextTermDeg > degreeOut) degreeOut = nextTermDeg;
+        }
+        else {
+            current->addop = ADDOP_NONE;
             break;
         }
     }
-    return d;
+    return firstTerm;
 }
 
-int Parser::parseTerm() {
+/** term -> [coefficient] [monomial_list] */
+TermNode* Parser::parseTermAST(int &maxDeg) {
+    TermNode* term = new TermNode;
+    term->coefficient = 1;
+    term->monomials = nullptr;
+    term->next = nullptr;
+    term->addop = ADDOP_NONE;
+
+    maxDeg = 0;
+
     Token t = lexer.peek(1);
     if (t.token_type == NUM) {
-        lexer.GetToken(); // consume the coefficient
-        TokenType t2 = lexer.peek(1).token_type;
-        if (t2 == ID || t2 == LPAREN) {
-            return parseMonomialList();
+        Token coeffTok = lexer.GetToken();
+        term->coefficient = stoi(coeffTok.lexeme);
+
+        TokenType nxt = lexer.peek(1).token_type;
+        if (nxt == ID || nxt == LPAREN) {
+            int sumDeg = 0;
+            MonomialNode* mlist = parseMonomialListAST(sumDeg);
+            term->monomials = mlist;
+            maxDeg = sumDeg;
         } else {
-            return 0; // just the coefficient => 0
+            maxDeg = 0;
         }
-    } else if (t.token_type == ID || t.token_type == LPAREN) {
-        // no numeric coefficient => 1 * ...
-        return parseMonomialList();
-    } else {
-        syntax_error();
-        return 0;
     }
+    else if (t.token_type == ID || t.token_type == LPAREN) {
+        int sumDeg = 0;
+        MonomialNode* mlist = parseMonomialListAST(sumDeg);
+        term->monomials = mlist;
+        maxDeg = sumDeg;
+    }
+    else {
+        syntax_error();
+    }
+    return term;
 }
 
-int Parser::parseMonomialList() {
-    // sum of degrees of each monomial
-    int total = 0;
+/** monomial_list -> monomial [ monomial_list ] */
+MonomialNode* Parser::parseMonomialListAST(int& totalDeg) {
+    totalDeg = 0;
+    MonomialNode* head = nullptr;
+    MonomialNode* curr = nullptr;
+
     while (true) {
         TokenType tt = lexer.peek(1).token_type;
         if (tt != ID && tt != LPAREN) {
             break;
         }
-        int mdeg = parseMonomial();
-        total += mdeg;
+        int thisMonomialDeg = 0;
+        MonomialNode* m = parseMonomialAST(thisMonomialDeg);
+        if (!head) {
+            head = m;
+            curr = m;
+        } else {
+            curr->next = m;
+            curr = m;
+        }
+        totalDeg += thisMonomialDeg;
     }
-    return total;
+    return head;
 }
 
-int Parser::parseMonomial() {
-    int pdeg = parsePrimary();
-    int deg = pdeg;
+/** monomial -> primary [ POWER NUM ] */
+MonomialNode* Parser::parseMonomialAST(int& degOut) {
+    MonomialNode* mn = new MonomialNode;
+    mn->next = nullptr;
+
+    int pdeg = 0;
+    mn->primary = parsePrimaryAST(pdeg);
+
     if (lexer.peek(1).token_type == POWER) {
-        lexer.GetToken(); // consume ^
+        lexer.GetToken();
         Token numTok = expect(NUM);
         int expVal = stoi(numTok.lexeme);
-        deg = pdeg * expVal;
+        mn->exponent = expVal;
+        degOut = pdeg * expVal;
+    } else {
+        mn->exponent = 1;
+        degOut = pdeg;
     }
-    return deg;
+    return mn;
 }
 
-int Parser::parsePrimary() {
+/** primary -> ID | LPAREN term_list RPAREN */
+PrimaryNode* Parser::parsePrimaryAST(int& degOut) {
+    PrimaryNode* prim = new PrimaryNode;
+    prim->isParen = false;
+    prim->varName = "";
+    prim->subTermList = nullptr;
+    degOut = 0;
+
     Token t = lexer.peek(1);
     if (t.token_type == ID) {
-        Token varTok = lexer.GetToken(); // consume ID
-        // Check if varTok is valid param
-        if (!currentPolyParams.empty()) {
-            bool found = false;
-            for (auto &p : currentPolyParams) {
-                if (p == varTok.lexeme) {found=true; break;}
-            }
-            if (!found) {
-                invalidMonomialLines.push_back(varTok.line_no);
+        Token varTok = lexer.GetToken();
+        bool found = false;
+        for (auto &p : currentPolyParams) {
+            if (p == varTok.lexeme) {
+                found = true;
+                break;
             }
         }
-        return 1;
+        if (!found && !currentPolyParams.empty()) {
+            invalidMonomialLines.push_back(varTok.line_no);
+        }
+        prim->varName = varTok.lexeme;
+        degOut = 1;
     }
     else if (t.token_type == LPAREN) {
-        lexer.GetToken(); // consume (
-        int d = parseTermList();
+        lexer.GetToken();
+        int subDeg = 0;
+        TermNode* subRoot = parseTermListAST(subDeg);
+        prim->isParen = true;
+        prim->subTermList = subRoot;
+        degOut = subDeg;
         expect(RPAREN);
-        return d;
     }
     else {
         syntax_error();
-        return 0;
     }
+    return prim;
 }
 
-// ===================== EXECUTE section =====================
-
+/** execute_section -> EXECUTE statement_list */
 void Parser::execute_section() {
     expect(EXECUTE);
     statement_list();
 }
 
+/** statement_list -> statement { statement } */
 void Parser::statement_list() {
     statement();
     while (true) {
@@ -309,6 +404,7 @@ void Parser::statement_list() {
     }
 }
 
+/** statement -> input_statement | output_statement | assign_statement */
 void Parser::statement() {
     Token t = lexer.peek(1);
     if (t.token_type == INPUT) {
@@ -325,6 +421,7 @@ void Parser::statement() {
     }
 }
 
+/** input_statement -> INPUT ID SEMICOLON */
 void Parser::input_statement() {
     expect(INPUT);
     Token varTok = expect(ID);
@@ -340,6 +437,7 @@ void Parser::input_statement() {
     executeStatements.push_back(s);
 }
 
+/** output_statement -> OUTPUT ID SEMICOLON */
 void Parser::output_statement() {
     expect(OUTPUT);
     Token varTok = expect(ID);
@@ -355,6 +453,7 @@ void Parser::output_statement() {
     executeStatements.push_back(s);
 }
 
+/** assign_statement -> ID EQUAL poly_evaluation SEMICOLON */
 void Parser::assign_statement() {
     Token lhsTok = expect(ID);
     allocateVariable(lhsTok.lexeme);
@@ -373,6 +472,7 @@ void Parser::assign_statement() {
     executeStatements.push_back(s);
 }
 
+/** poly_evaluation -> poly_name LPAREN argument_list RPAREN */
 void Parser::poly_evaluation(PolyEval* pe) {
     Token polyTok = poly_name();
     pe->polyName = polyTok.lexeme;
@@ -383,11 +483,10 @@ void Parser::poly_evaluation(PolyEval* pe) {
     int c = argument_list(pe);
     expect(RPAREN);
 
-    // check argument count
     int declaredCount = -1;
     for (auto &ph : polyHeaders) {
         if (ph.name == pe->polyName) {
-            declaredCount = ph.paramNames.size();
+            declaredCount = (int)ph.paramNames.size();
             break;
         }
     }
@@ -396,6 +495,7 @@ void Parser::poly_evaluation(PolyEval* pe) {
     }
 }
 
+/** argument_list -> argument { COMMA argument } */
 int Parser::argument_list(PolyEval* pe) {
     int count = 0;
     argument(pe);
@@ -408,19 +508,18 @@ int Parser::argument_list(PolyEval* pe) {
     return count;
 }
 
+/** argument -> ID | NUM | poly_evaluation */
 void Parser::argument(PolyEval* pe) {
     Token t = lexer.peek(1);
     if (t.token_type == ID) {
         Token t2 = lexer.peek(2);
         if (t2.token_type == LPAREN) {
-            // nested poly call
             PolyEval* nested = new PolyEval;
             poly_evaluation(nested);
             pe->nestedArgs.push_back(nested);
         } else {
-            // It's a simple ID argument. We must allocate so it shows up as a variable.
             Token idTok = expect(ID);
-            allocateVariable(idTok.lexeme);  // <<--- ADD THIS
+            allocateVariable(idTok.lexeme);
             pe->args.push_back(idTok.lexeme);
         }
     }
@@ -433,19 +532,21 @@ void Parser::argument(PolyEval* pe) {
     }
 }
 
+/** inputs_section -> INPUTS num_list */
 void Parser::inputs_section() {
     expect(INPUTS);
     inputnum_list();
 }
 
+/** inputnum_list -> NUM { NUM } */
 void Parser::inputnum_list() {
-    expect(NUM);
+    Token first = expect(NUM);
+    inputValues.push_back(stoi(first.lexeme));
     while (lexer.peek(1).token_type == NUM) {
-        expect(NUM);
+        Token more = expect(NUM);
+        inputValues.push_back(stoi(more.lexeme));
     }
 }
-
-// ========== Memory and Execution Stubs ==========
 
 int Parser::allocateVariable(const string &varName) {
     if (symbolTable.find(varName) == symbolTable.end()) {
@@ -455,80 +556,175 @@ int Parser::allocateVariable(const string &varName) {
 }
 
 void Parser::execute_program() {
-    // Not relevant unless you do Task 2
+    // not automatically called
 }
 
-int Parser::evaluate_polynomial(PolyEval* /*polyEval*/) {
-    // dummy
-    return 42;
+int Parser::evaluate_polynomial(PolyEval* pe) {
+    PolyHeaderInfo* ph = nullptr;
+    for (auto &hdr : polyHeaders) {
+        if (hdr.name == pe->polyName) {
+            ph = &hdr;
+            break;
+        }
+    }
+    if (!ph) {
+        return 0; // not declared
+    }
+
+    // gather arg values
+    vector<int> argValues;
+    function<int(const string&)> getValueOfArg = [&](const string &arg)->int {
+        bool allDigits = true;
+        for (char c : arg) {
+            if (c < '0' || c > '9') {
+                allDigits=false; 
+                break;
+            }
+        }
+        if (allDigits) {
+            return stoi(arg);
+        } else {
+            auto it = symbolTable.find(arg);
+            if (it == symbolTable.end()) return 0;
+            return mem[it->second];
+        }
+    };
+
+    int needed = (int)ph->paramNames.size();
+    int iArgs = 0;
+    int iNested = 0;
+
+    for (int i = 0; i < needed; i++) {
+        if (iArgs < (int)pe->args.size()) {
+            int val = getValueOfArg(pe->args[iArgs]);
+            argValues.push_back(val);
+            iArgs++;
+        }
+        else {
+            if (iNested < (int)pe->nestedArgs.size()) {
+                int val = evaluate_polynomial(pe->nestedArgs[iNested]);
+                argValues.push_back(val);
+                iNested++;
+            }
+            else {
+                argValues.push_back(0);
+            }
+        }
+    }
+
+    unordered_map<string,int> paramMap;
+    for (int i = 0; i < (int)ph->paramNames.size(); i++) {
+        paramMap[ ph->paramNames[i] ] = i;
+    }
+    return evalPolyAST(ph->astRoot, argValues, paramMap);
 }
 
-// ========== Task 3: Detect Uninitialized Variables ==========
-// We produce "Warning Code 1: ..." if an argument in a polynomial evaluation
-// is used but never assigned nor input prior to that usage.
+int Parser::evalPolyAST(TermNode* termList,
+                        const vector<int>& argValues,
+                        const unordered_map<string,int>& paramMap) {
+    if (!termList) return 0;
+    int val = evalTermNode(termList, argValues, paramMap);
 
-void Parser::DetectUninitializedVars() 
-{
-    // Keep track of whether each variable location is "initialized"
-    // by an earlier INPUT or ASSIGN statement.
+    if (termList->addop == ADDOP_NONE) {
+        return val;
+    }
+    else if (termList->addop == ADDOP_PLUS) {
+        return val + evalPolyAST(termList->next, argValues, paramMap);
+    }
+    else {
+        return val - evalPolyAST(termList->next, argValues, paramMap);
+    }
+}
+
+int Parser::evalTermNode(TermNode* t,
+                         const vector<int>& argValues,
+                         const unordered_map<string,int>& paramMap) {
+    if (!t) return 0;
+    int product = 1;
+    if (t->monomials) {
+        product = evalMonomialList(t->monomials, argValues, paramMap);
+    }
+    return t->coefficient * product;
+}
+
+int Parser::evalMonomialList(MonomialNode* mono,
+                             const vector<int>& argValues,
+                             const unordered_map<string,int>& paramMap) {
+    if (!mono) return 1;
+    int baseVal = evalPrimary(mono->primary, argValues, paramMap);
+
+    int result = 1;
+    for (int i = 0; i < mono->exponent; i++) {
+        result *= baseVal;
+    }
+    if (mono->next) {
+        return result * evalMonomialList(mono->next, argValues, paramMap);
+    }
+    return result;
+}
+
+int Parser::evalPrimary(PrimaryNode* prim,
+                        const vector<int>& argValues,
+                        const unordered_map<string,int>& paramMap) {
+    if (!prim) return 0;
+    if (!prim->isParen) {
+        auto it = paramMap.find(prim->varName);
+        if (it == paramMap.end()) {
+            return 0;
+        }
+        int idx = it->second;
+        if (idx < 0 || idx >= (int)argValues.size()) return 0;
+        return argValues[idx];
+    } else {
+        return evalPolyAST(prim->subTermList, argValues, paramMap);
+    }
+}
+
+/** Task 3: Uninitialized variables */
+void Parser::DetectUninitializedVars() {
     vector<bool> initialized(nextAvailable, false);
     vector<int> uninitLines;
 
-    // We'll define a function to collect all variable locations used by a polyEval
-    std::function<void(PolyEval*, std::vector<int>&)> collectUsedVars;
-    collectUsedVars = [&](PolyEval* pe, std::vector<int>& used) {
+    function<void(PolyEval*, vector<int>&)> collectUsedVars;
+    collectUsedVars = [&](PolyEval* pe, vector<int>& used) {
         if (!pe) return;
-        // For each arg that is ID, gather its location
         for (auto &arg : pe->args) {
             bool isNum = true;
             for (char c : arg) {
                 if (c < '0' || c > '9') {
-                    isNum = false;
+                    isNum = false; 
                     break;
                 }
             }
-            if (!isNum) { // it's presumably a variable
+            if (!isNum) {
                 if (symbolTable.find(arg) != symbolTable.end()) {
                     used.push_back(symbolTable[arg]);
                 }
             }
         }
-        // Recurse into nested calls
         for (auto* nested : pe->nestedArgs) {
             collectUsedVars(nested, used);
         }
     };
 
-    // Now do a forward pass over the statements
     for (Statement* st : executeStatements) {
         switch (st->type) {
-            case STMT_INPUT:
-            {
-                // This "initializes" st->variable
+            case STMT_INPUT: {
                 int loc = symbolTable[st->variable];
                 initialized[loc] = true;
                 break;
             }
-            case STMT_OUTPUT:
-            {
-                // We do *not* treat OUTPUT X as a polynomial usage, so no checks here
+            case STMT_OUTPUT: {
                 break;
             }
-            case STMT_ASSIGN:
-            {
-                // 1) Collect the used variables in st->polyEval
+            case STMT_ASSIGN: {
                 vector<int> usedVars;
                 collectUsedVars(st->polyEval, usedVars);
-
-                // 2) For each used var, if not initialized => record line number
                 for (int vloc : usedVars) {
                     if (!initialized[vloc]) {
-                        // If the statement uses multiple uninitialized, we add the line multiple times
                         uninitLines.push_back(st->line_no);
                     }
                 }
-
-                // 3) Now that we've used them, we define st->variable
                 int lhsLoc = symbolTable[st->variable];
                 initialized[lhsLoc] = true;
                 break;
@@ -536,7 +732,6 @@ void Parser::DetectUninitializedVars()
         }
     }
 
-    // Print if we have uninit lines
     if (!uninitLines.empty()) {
         sort(uninitLines.begin(), uninitLines.end());
         cout << "Warning Code 1:";
@@ -547,14 +742,11 @@ void Parser::DetectUninitializedVars()
     }
 }
 
-// ========== Task 4: Useless Assignments ==========
-
+/** Task 4: Useless assignments */
 void Parser::DetectUselessAssignments() {
-    // We'll do a forward-scan approach as before.
-    std::function<void(PolyEval*, vector<int>&)> collectUsedVars;
+    function<void(PolyEval*, vector<int>&)> collectUsedVars;
     collectUsedVars = [&](PolyEval* pe, vector<int>& usedVars) {
         if (!pe) return;
-        // simple arguments
         for (auto &a : pe->args) {
             bool isNum = true;
             for (char c : a) {
@@ -569,58 +761,57 @@ void Parser::DetectUselessAssignments() {
                 }
             }
         }
-        // nested calls
         for (auto* nested : pe->nestedArgs) {
             collectUsedVars(nested, usedVars);
         }
     };
 
     vector<int> uselessLines;
-    int n = executeStatements.size();
+    int n = (int)executeStatements.size();
     for (int i = 0; i < n; i++) {
         if (executeStatements[i]->type == STMT_ASSIGN) {
             string var = executeStatements[i]->variable;
             int vloc = symbolTable[var];
             bool used = false;
 
-            // Scan forward
             for (int j = i+1; j < n; j++) {
-                // If redefinition of var => check if used in j's RHS
                 if ((executeStatements[j]->type == STMT_ASSIGN ||
                      executeStatements[j]->type == STMT_INPUT)
-                    && executeStatements[j]->variable == var) 
+                    && executeStatements[j]->variable == var)
                 {
                     if (executeStatements[j]->type == STMT_ASSIGN) {
-                        // see if var is used in j's RHS
                         vector<int> usedVars;
                         collectUsedVars(executeStatements[j]->polyEval, usedVars);
                         bool found = false;
                         for (int loc : usedVars) {
-                            if (loc == vloc) {found=true; break;}
+                            if (loc == vloc) {
+                                found = true;
+                                break;
+                            }
                         }
                         if (found) { used = true; }
                     }
-                    break; 
+                    break;
                 }
-                // If an OUTPUT uses var
                 if (executeStatements[j]->type == STMT_OUTPUT &&
-                    executeStatements[j]->variable == var) 
+                    executeStatements[j]->variable == var)
                 {
                     used = true;
                     break;
                 }
-                // If another assignment's RHS uses var
                 if (executeStatements[j]->type == STMT_ASSIGN) {
                     vector<int> usedVars;
                     collectUsedVars(executeStatements[j]->polyEval, usedVars);
                     bool found = false;
                     for (int loc : usedVars) {
-                        if (loc == vloc) { found=true; break; }
+                        if (loc == vloc) {
+                            found = true;
+                            break;
+                        }
                     }
                     if (found) { used=true; break; }
                 }
             }
-
             if (!used) {
                 uselessLines.push_back(executeStatements[i]->line_no);
             }
@@ -636,8 +827,6 @@ void Parser::DetectUselessAssignments() {
         cout << endl;
     }
 }
-
-// ========== main() ==========
 
 int main() {
     Parser parser;
